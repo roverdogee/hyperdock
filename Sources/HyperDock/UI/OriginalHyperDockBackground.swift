@@ -27,16 +27,24 @@ struct OriginalHyperDockBackground: View {
         )
     }
 
+    /// Leaves room inside the transparent NSPanel for the system glass halo. Without
+    /// this margin the compositor clips that halo to the rectangular window boundary,
+    /// leaving short grey shelves outside the two top corners.
+    private var liquidShape: BubbleShape { shape.inset(by: 2.5) }
+
     @ViewBuilder
     var body: some View {
         if preferences.theme == .liquidGlass {
             // The system renderer owns translucency, contrast and refraction. In
             // particular, this follows the Liquid Glass choice in System Settings →
             // Appearance live; baking an opacity into a regular material would not.
-            shape
+            liquidShape
                 .fill(.clear)
-                .glassEffect(.regular.interactive(), in: shape)
-                .overlay { shape.stroke(borderColor, lineWidth: 0.75) }
+                .glassEffect(.regular.interactive(), in: liquidShape)
+                .overlay {
+                    liquidShape.stroke(borderColor, lineWidth: 0.5)
+                    liquidShape.stroke(specularEdge, lineWidth: 1)
+                }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         } else {
@@ -64,6 +72,22 @@ struct OriginalHyperDockBackground: View {
     }
 
     private var borderColor: Color {
-        isLight ? .black.opacity(0.32) : .white.opacity(0.38)
+        isLight ? .black.opacity(0.24) : .white.opacity(0.30)
+    }
+
+    /// A directional rim is visible even over a blank white page, where refraction has
+    /// almost no detail to bend. It does not tint or opacify the glass itself, so the
+    /// system Appearance choice remains in full control of the material.
+    private var specularEdge: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(isLight ? 0.82 : 0.62), location: 0),
+                .init(color: .white.opacity(0.10), location: 0.38),
+                .init(color: .clear, location: 0.58),
+                .init(color: .black.opacity(isLight ? 0.18 : 0.30), location: 1),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }

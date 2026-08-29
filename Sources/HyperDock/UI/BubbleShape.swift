@@ -14,7 +14,7 @@ enum DockEdge: Sendable {
 /// that the Liquid Glass material, the border and the shadow all follow one continuous
 /// path. `glassEffect(_:in:)` renders correctly along an arbitrary shape, and a shadow
 /// cast from two overlapping views would show a seam where they meet.
-struct BubbleShape: Shape {
+nonisolated struct BubbleShape: InsettableShape, Sendable {
     /// Where the pointer meets the body, in the shape's own coordinate space. Tracks
     /// the Dock icon, which moves as the Dock magnifies or slides in.
     var pointerPosition: CGFloat
@@ -22,6 +22,7 @@ struct BubbleShape: Shape {
     var cornerRadius: CGFloat = 12
     var pointerWidth: CGFloat = 22
     var pointerLength: CGFloat = 10
+    var insetAmount: CGFloat = 0
     /// Lets the pointer animate along the edge when the user slides to a neighbouring
     /// icon instead of the whole bubble jumping.
     var showsPointer: Bool = true
@@ -31,7 +32,15 @@ struct BubbleShape: Shape {
         set { pointerPosition = newValue }
     }
 
+    nonisolated func inset(by amount: CGFloat) -> BubbleShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
     nonisolated func path(in rect: CGRect) -> Path {
+        let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        guard rect.width > 0, rect.height > 0 else { return Path() }
         guard showsPointer else {
             return Path(roundedRect: rect, cornerRadius: cornerRadius)
         }
