@@ -214,7 +214,8 @@ struct WindowTile: View {
 
     private var usesLightBubble: Bool {
         preferences.theme == .vibrantLight
-            || (preferences.theme == .automatic && colorScheme == .light)
+            || ([.automatic, .liquidGlass].contains(preferences.theme)
+                && colorScheme == .light)
     }
 
     private var closeButtonAsset: String {

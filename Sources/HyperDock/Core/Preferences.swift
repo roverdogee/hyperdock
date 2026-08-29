@@ -4,8 +4,9 @@ import Observation
 // MARK: - Enumerations
 
 enum AppearanceTheme: String, CaseIterable, Identifiable, Sendable {
-    // Names and order recovered from HyperDock 1.8's Appearance preference pane.
-    case automatic, classic, vibrantLight, vibrantDark
+    // The first four names and their order come from HyperDock 1.8. Liquid Glass is the
+    // native theme added by this implementation for current macOS releases.
+    case automatic, classic, vibrantLight, vibrantDark, liquidGlass
     var id: String { rawValue }
 }
 

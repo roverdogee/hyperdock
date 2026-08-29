@@ -11,11 +11,19 @@ struct AppearancePane: View {
                     Text("Classic").tag(AppearanceTheme.classic)
                     Text("Vibrant Light").tag(AppearanceTheme.vibrantLight)
                     Text("Vibrant Dark").tag(AppearanceTheme.vibrantDark)
+                    Text("Liquid Glass").tag(AppearanceTheme.liquidGlass)
                 }
                 Picker("Appear with", selection: $preferences.popupAnimation) {
                     Text("Snap in").tag(PopupAnimation.snapIn)
                     Text("Fade").tag(PopupAnimation.fade)
                     Text("No animation").tag(PopupAnimation.none)
+                }
+            }
+
+            if preferences.theme == .liquidGlass {
+                Section {
+                    Text("Liquid Glass follows the transparency and contrast selected in System Settings → Appearance.")
+                        .foregroundStyle(.secondary)
                 }
             }
 

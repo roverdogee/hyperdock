@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The preview bubble's content, using HyperDock 1.8's original artwork and hierarchy.
+/// The preview bubble's content, using HyperDock 1.8's hierarchy plus the native
+/// Liquid Glass appearance available on current macOS releases.
 struct BubbleRoot: View {
     @Bindable var model: BubbleModel
     @State private var preferences = Preferences.shared
@@ -91,7 +92,8 @@ struct BubbleRoot: View {
 
     private var primaryTextColor: Color {
         if preferences.theme == .vibrantLight
-            || (preferences.theme == .automatic && colorScheme == .light) {
+            || ([.automatic, .liquidGlass].contains(preferences.theme)
+                && colorScheme == .light) {
             return .black.opacity(0.86)
         }
         return .white

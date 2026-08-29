@@ -1042,6 +1042,26 @@
         }
       }
     },
+    "Liquid Glass": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liquid Glass"
+          }
+        }
+      }
+    },
+    "Liquid Glass follows the transparency and contrast selected in System Settings → Appearance.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liquid Glass 会跟随“系统设置 → 外观”中选择的透明度和对比度。"
+          }
+        }
+      }
+    },
     "Live thumbnails re-capture windows that are on screen, so a playing video keeps moving in its preview.": {
       "localizations": {
         "zh-Hans": {

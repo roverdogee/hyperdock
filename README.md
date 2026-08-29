@@ -12,7 +12,7 @@ original HyperDock source code. See [Original HyperDock notice](ORIGINAL_HYPERDO
 
 | | |
 |---|---|
-| **Version** | 1.0.0 |
+| **Version** | 0.2 |
 | **Platform** | macOS 26.0+, Apple Silicon (`arm64`) |
 | **Bundle ID** | `com.hyperdock.HyperDock` |
 | **Languages** | English, Simplified Chinese |
@@ -24,13 +24,17 @@ original HyperDock source code. See [Original HyperDock notice](ORIGINAL_HYPERDO
 - Full-size preview on hover
 - Click to raise a window; hover close button; plus button for a new window
 - Keyboard navigation and scroll gestures within the preview bubble
-- Four HyperDock-inspired appearances: Automatic, Classic, Vibrant Light, Vibrant Dark
+- Five appearances: Automatic, Classic, Vibrant Light, Vibrant Dark, and native Liquid Glass
 - Adjustable preview size, columns, animation, labels, timing, and live refresh
 - Optional instant reveal for an auto-hidden Dock
 - Menu-bar controls, launch at login, and a global Settings shortcut
 
 The project intentionally does **not** include HyperDock's window snapping, tiling,
 modifier-drag window management, or per-application Dock click actions.
+
+The Liquid Glass theme uses the system glass renderer, so its transparency and contrast
+follow the Liquid Glass choice in **System Settings → Appearance** rather than a separate
+in-app opacity value.
 
 ## Original HyperDock assets
 

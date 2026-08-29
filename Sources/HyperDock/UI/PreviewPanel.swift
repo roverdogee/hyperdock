@@ -147,7 +147,7 @@ final class PreviewPanelController {
     /// would restyle the text while leaving the backdrop following the system.
     func applyTheme() {
         switch Preferences.shared.theme {
-        case .automatic: panel.appearance = nil
+        case .automatic, .liquidGlass: panel.appearance = nil
         case .classic: panel.appearance = NSAppearance(named: .darkAqua)
         case .vibrantLight: panel.appearance = NSAppearance(named: .vibrantLight)
         case .vibrantDark: panel.appearance = NSAppearance(named: .vibrantDark)
