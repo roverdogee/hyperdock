@@ -83,9 +83,15 @@ struct WindowTile: View {
     private var card: some View {
         ZStack {
             thumbnailLayer
+            // A permanent inner hairline keeps white screenshots distinct from light
+            // glass. Drawing it inside the clipped card avoids the rectangular corner
+            // shadows produced by an outer layer or a view-level shadow.
+            RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
+                .strokeBorder(cardBorderColor, lineWidth: 1)
+                .allowsHitTesting(false)
             if isFrontWindow {
                 RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(0.42), lineWidth: 1)
+                    .strokeBorder(frontWindowBorderColor, lineWidth: 1)
                     .allowsHitTesting(false)
             }
             if highlighted {
@@ -258,6 +264,14 @@ struct WindowTile: View {
 
     private var titleColor: Color {
         usesLightBubble ? .black : .white
+    }
+
+    private var cardBorderColor: Color {
+        usesLightBubble ? .black.opacity(0.28) : .white.opacity(0.30)
+    }
+
+    private var frontWindowBorderColor: Color {
+        usesLightBubble ? .black.opacity(0.46) : .white.opacity(0.52)
     }
 
     /// Falls back to the application name so a window with no title is still identifiable
