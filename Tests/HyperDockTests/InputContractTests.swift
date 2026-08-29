@@ -2,17 +2,16 @@ import CoreGraphics
 import Testing
 @testable import HyperDock
 
-@Test func rightMouseDownMapsToConfiguredRightButton() {
-    #expect(DockMouseButton(eventType: .rightMouseDown, buttonNumber: 1) == .right)
-    let rightMouseBit: CGEventMask = 1 << CGEventType.rightMouseDown.rawValue
-    #expect(WindowManager.eventMask & rightMouseBit != 0)
-}
+@Test func previewInputTapOnlyObservesKeyboardAndScroll() {
+    let keyBit: CGEventMask = 1 << CGEventType.keyDown.rawValue
+    let scrollBit: CGEventMask = 1 << CGEventType.scrollWheel.rawValue
+    let mouseBit: CGEventMask = 1 << CGEventType.leftMouseDown.rawValue
+    let dragBit: CGEventMask = 1 << CGEventType.leftMouseDragged.rawValue
 
-@Test func onlySupportedMouseDownEventsBecomeDockButtons() {
-    #expect(DockMouseButton(eventType: .leftMouseDown, buttonNumber: 0) == .left)
-    #expect(DockMouseButton(eventType: .otherMouseDown, buttonNumber: 2) == .middle)
-    #expect(DockMouseButton(eventType: .otherMouseDown, buttonNumber: 3) == nil)
-    #expect(DockMouseButton(eventType: .leftMouseUp, buttonNumber: 0) == nil)
+    #expect(PreviewInputMonitor.eventMask & keyBit != 0)
+    #expect(PreviewInputMonitor.eventMask & scrollBit != 0)
+    #expect(PreviewInputMonitor.eventMask & mouseBit == 0)
+    #expect(PreviewInputMonitor.eventMask & dragBit == 0)
 }
 
 @Test func everySelectableModifierRoundTripsThroughEventFlags() {

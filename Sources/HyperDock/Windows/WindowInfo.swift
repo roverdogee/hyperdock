@@ -22,6 +22,9 @@ nonisolated struct WindowInfo: Identifiable, Sendable, Equatable {
     /// Global, top-left origin coordinates.
     let frame: CGRect
 
+    /// Position in WindowServer's front-to-back list at query time.
+    let stackingIndex: Int
+
     /// The Mission Control desktop number this window sits on, if known.
     /// `nil` when the Space SPI is unavailable or the window belongs to none.
     let spaceNumber: Int?

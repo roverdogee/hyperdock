@@ -55,51 +55,6 @@ nonisolated enum ScreenGeometry {
         NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
     }
 
-    /// Which edge of its screen the Dock occupies, inferred from the Dock's own
-    /// geometry.
-    ///
-    /// `defaults read com.apple.dock orientation` cannot be used: when the Dock is at
-    /// the bottom the key is simply absent. And with auto-hide on, `visibleFrame`
-    /// reserves no space for the Dock, so it is not a detector either.
-    /// The display adjacent to a screen in a direction, or nil at the desktop's edge.
-    ///
-    /// Adjacency is judged on full `frame`s in AppKit coordinates. Among candidates
-    /// beyond the given edge, the one sharing the most perpendicular overlap wins, so a
-    /// display sitting diagonally is only chosen when nothing lines up better. The 1 pt
-    /// slack absorbs the rounding in user-arranged layouts, which rarely share edges to
-    /// the point.
-    static func screen(_ direction: SnapZone.Direction, of screen: NSScreen) -> NSScreen? {
-        let base = screen.frame
-        var best: (screen: NSScreen, overlap: CGFloat)?
-        // Compared by frame, not identity: AppKit usually vends cached NSScreen
-        // instances, but nothing documents that two fetches return the same objects,
-        // and a display's frame is unique within one arrangement.
-        for candidate in NSScreen.screens where candidate.frame != screen.frame {
-            let frame = candidate.frame
-            let qualifies: Bool
-            let overlap: CGFloat
-            switch direction {
-            case .right:
-                qualifies = frame.minX >= base.maxX - 1
-                overlap = min(frame.maxY, base.maxY) - max(frame.minY, base.minY)
-            case .left:
-                qualifies = frame.maxX <= base.minX + 1
-                overlap = min(frame.maxY, base.maxY) - max(frame.minY, base.minY)
-            case .up:
-                qualifies = frame.minY >= base.maxY - 1
-                overlap = min(frame.maxX, base.maxX) - max(frame.minX, base.minX)
-            case .down:
-                qualifies = frame.maxY <= base.minY + 1
-                overlap = min(frame.maxX, base.maxX) - max(frame.minX, base.minX)
-            }
-            guard qualifies else { continue }
-            if best == nil || overlap > best!.overlap {
-                best = (candidate, overlap)
-            }
-        }
-        return best?.screen
-    }
-
     static func dockEdge(forDockFrame frame: CGRect) -> DockEdge {
         guard frame.width > 0, frame.height > 0 else { return .bottom }
         if frame.width > frame.height { return .bottom }

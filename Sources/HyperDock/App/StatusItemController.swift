@@ -105,7 +105,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// Removes the icon from the menu bar for this session.
     ///
-    /// HyperDock keeps running — previews and window management are unaffected. The icon
+    /// HyperDock keeps running — previews are unaffected. The icon
     /// returns the next time the app is opened, which is the whole reason this is a
     /// session-only state: the icon is the only way back into the settings, so making the
     /// hide permanent from inside the app would leave no route to undo it.

@@ -60,6 +60,10 @@ nonisolated enum CGS {
         resolve("CGSGetConnectionIDForPSN",
                 as: (@convention(c) (ConnectionID, UnsafeRawPointer, UnsafeMutablePointer<ConnectionID>) -> Int32).self)
 
+    private static let _setWindowAlpha =
+        resolve("SLSSetWindowAlpha",
+                as: (@convention(c) (ConnectionID, CGWindowID, Float) -> Int32).self)
+
     /// True when the Space SPI resolved and the feature can be offered at all.
     static var isAvailable: Bool {
         _mainConnectionID != nil && _copyManagedDisplaySpaces != nil
@@ -67,6 +71,38 @@ nonisolated enum CGS {
 
     static var connectionID: ConnectionID? {
         _mainConnectionID?()
+    }
+
+    /// Temporarily changes one WindowServer surface's opacity.
+    @discardableResult
+    static func setWindowAlpha(_ window: CGWindowID, _ alpha: Float) -> Bool {
+        guard let cid = connectionID, let setAlpha = _setWindowAlpha else { return false }
+        return setAlpha(cid, window, alpha) == 0
+    }
+
+    /// Finds the Dock's small app-name tooltip near one tile.
+    /// Coordinates are top-left-origin, matching both AX and CGWindow dictionaries.
+    static func dockTooltipWindows(near tile: CGRect) -> [CGWindowID] {
+        guard let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
+                as? [[String: Any]] else { return [] }
+
+        return info.compactMap { entry in
+            guard (entry[kCGWindowOwnerName as String] as? String) == "Dock",
+                  (entry[kCGWindowLayer as String] as? Int ?? 0) > 0,
+                  let id = entry[kCGWindowNumber as String] as? CGWindowID,
+                  let bounds = entry[kCGWindowBounds as String] as? [String: CGFloat]
+            else { return nil }
+
+            let frame = CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0,
+                               width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+            guard frame.width >= 20, frame.width <= 500,
+                  frame.height >= 12, frame.height <= 140,
+                  abs(frame.midX - tile.midX) <= max(180, tile.width * 2.5),
+                  frame.minY >= tile.minY - 180,
+                  frame.maxY <= tile.maxY + 40
+            else { return nil }
+            return id
+        }
     }
 
     // MARK: - Space selector bits

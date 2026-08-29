@@ -38,17 +38,6 @@ private nonisolated final class DeliveryCounter: @unchecked Sendable {
     #expect(deliveries.value == 1)
 }
 
-@Test func systemTilingIsDisabledOnlyWhileHyperDockSnapOwnsTheGesture() {
-    #expect(SystemTiling.shouldDisable(hyperDockDisabled: false, snapEnabled: true,
-                                       managerAvailable: true))
-    #expect(!SystemTiling.shouldDisable(hyperDockDisabled: false, snapEnabled: true,
-                                        managerAvailable: false))
-    #expect(!SystemTiling.shouldDisable(hyperDockDisabled: true, snapEnabled: true,
-                                        managerAvailable: true))
-    #expect(!SystemTiling.shouldDisable(hyperDockDisabled: false, snapEnabled: false,
-                                        managerAvailable: true))
-}
-
 @Test func rebuiltWindowUsesItsLiveSiblingForSpaceActivation() {
     let candidates = [
         CGS.SpaceActivationTarget(space: 4, windowID: 202, windowArea: 900),
@@ -111,49 +100,6 @@ private nonisolated final class DeliveryCounter: @unchecked Sendable {
     #expect(Permissions.pollingInterval(hasAccessibility: true) == 15)
 }
 
-@Test func systemTilingSnapshotPreservesAbsentAndExplicitValuesAndMigratesLegacyOwnership() {
-    let keys = ["EnableTilingByEdgeDrag", "EnableTopTilingByEdgeDrag"]
-    let originals: [Bool?] = [nil, true, false]
-
-    for (index, original) in originals.enumerated() {
-        let externalName = "HyperDockTests.system.external.\(UUID().uuidString)"
-        let ownerName = "HyperDockTests.system.owner.\(UUID().uuidString)"
-        let external = UserDefaults(suiteName: externalName)!
-        let owner = UserDefaults(suiteName: ownerName)!
-        defer {
-            external.removePersistentDomain(forName: externalName)
-            owner.removePersistentDomain(forName: ownerName)
-        }
-        if let original {
-            for key in keys { external.set(original, forKey: key) }
-        }
-
-        SystemTiling.captureOriginalValuesIfNeeded(from: external, snapshotStore: owner)
-        for key in keys { external.set(index.isMultiple(of: 2), forKey: key) }
-        SystemTiling.restoreOriginalValues(in: external, snapshotStore: owner)
-
-        for key in keys {
-            #expect((external.object(forKey: key) as? Bool) == original)
-        }
-    }
-
-    let legacyExternalName = "HyperDockTests.system.legacy.external.\(UUID().uuidString)"
-    let legacyOwnerName = "HyperDockTests.system.legacy.owner.\(UUID().uuidString)"
-    let legacyExternal = UserDefaults(suiteName: legacyExternalName)!
-    let legacyOwner = UserDefaults(suiteName: legacyOwnerName)!
-    defer {
-        legacyExternal.removePersistentDomain(forName: legacyExternalName)
-        legacyOwner.removePersistentDomain(forName: legacyOwnerName)
-    }
-    for key in keys { legacyExternal.set(false, forKey: key) }
-    SystemTiling.captureOriginalValuesIfNeeded(from: legacyExternal,
-                                               snapshotStore: legacyOwner)
-    SystemTiling.migrateLegacyOwnershipIfNeeded(existingInstallation: true,
-                                                externalDefaults: legacyExternal,
-                                                snapshotStore: legacyOwner)
-    for key in keys { #expect(legacyExternal.object(forKey: key) == nil) }
-}
-
 @Test func dockSnapshotPreservesExactValuesAndMigratesLegacyOwnership() {
     let delay = "autohide-delay"
     let animation = "autohide-time-modifier"
@@ -192,6 +138,35 @@ private nonisolated final class DeliveryCounter: @unchecked Sendable {
                                          limit: 64))
     #expect(!ThumbnailEngine.shouldEvict(cacheCount: 64, alreadyContainsWindow: true,
                                          limit: 64))
+}
+
+@Test func thumbnailsFitAStableMaximumRectangle() {
+    let maximum = CGSize(width: 220, height: 150)
+    let landscape = BubbleModel.fittedThumbnailSize(aspectRatio: 16.0 / 9.0,
+                                                     maximum: maximum)
+    let portrait = BubbleModel.fittedThumbnailSize(aspectRatio: 9.0 / 19.5,
+                                                    maximum: maximum)
+    let ultraWide = BubbleModel.fittedThumbnailSize(aspectRatio: 4,
+                                                     maximum: maximum)
+
+    #expect(landscape.width == 220)
+    #expect(landscape.height <= 150)
+    #expect(portrait.height == 150)
+    #expect(portrait.width < landscape.width)
+    #expect(ultraWide.width == 220)
+    #expect(ultraWide.height < landscape.height)
+}
+
+@Test func previewSizeSliderConcentratesItsRangeOnCompactSizes() {
+    #expect(BubbleModel.thumbnailWidth(forSliderValue: 0) == 115)
+    #expect(BubbleModel.thumbnailWidth(forSliderValue: 0.65) == 240)
+    #expect(BubbleModel.thumbnailWidth(forSliderValue: 0.85) == 300)
+    #expect(BubbleModel.thumbnailWidth(forSliderValue: 1) == 320)
+
+    let oldDefaultEffectiveWidth = 206.0
+    let slider = BubbleModel.sliderValue(forThumbnailWidth: oldDefaultEffectiveWidth)
+    #expect(abs(BubbleModel.thumbnailWidth(forSliderValue: slider)
+                - oldDefaultEffectiveWidth) < 0.01)
 }
 
 @Test func interactiveWindowQueriesNeverWaitForOptionalTitleEnrichment() {

@@ -8,8 +8,9 @@ struct AppearancePane: View {
             Section {
                 Picker("Theme", selection: $preferences.theme) {
                     Text("Automatic").tag(AppearanceTheme.automatic)
-                    Text("Light").tag(AppearanceTheme.light)
-                    Text("Dark").tag(AppearanceTheme.dark)
+                    Text("Classic").tag(AppearanceTheme.classic)
+                    Text("Vibrant Light").tag(AppearanceTheme.vibrantLight)
+                    Text("Vibrant Dark").tag(AppearanceTheme.vibrantDark)
                 }
                 Picker("Appear with", selection: $preferences.popupAnimation) {
                     Text("Snap in").tag(PopupAnimation.snapIn)
@@ -44,7 +45,7 @@ struct AppearancePane: View {
                     NumberField(value: $preferences.distanceFromDock, range: 0...400, unit: "px")
                 }
             } header: { Text("Size and layout") } footer: {
-                Text("Previews per row is a maximum. Fewer windows are spread evenly across the rows they need.")
+                Text("Previews fill each row up to this limit before starting the next row.")
             }
 
             Section("Show in each preview") {

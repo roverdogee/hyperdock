@@ -542,12 +542,12 @@
         }
       }
     },
-    "Every preference returns to its default, per-app Dock bindings are removed, HyperDock stops opening at login, and your Dock's own settings are restored. This cannot be undone.": {
+    "Every preference returns to its default, HyperDock stops opening at login, and your Dock's own settings are restored. This cannot be undone.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "所有偏好恢复默认，针对单个应用的绑定被移除，HyperDock 不再开机启动，你的程序坞设置也会还原。此操作无法撤销。"
+            "value": "所有偏好恢复默认，HyperDock 不再开机启动，你的程序坞设置也会还原。此操作无法撤销。"
           }
         }
       }
@@ -1022,12 +1022,12 @@
         }
       }
     },
-    "Lets HyperDock read Dock icons and raise, close and move windows.": {
+    "Lets HyperDock read Dock icons and raise or close windows.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用于读取程序坞图标，以及前置、关闭和移动窗口。"
+            "value": "用于读取程序坞图标，以及前置或关闭窗口。"
           }
         }
       }
@@ -1432,12 +1432,12 @@
         }
       }
     },
-    "Puts every setting back to how it shipped, including the Dock Items bindings and any per-app overrides.": {
+    "Puts every setting back to how it shipped.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "把所有设置恢复为出厂状态，包括程序坞项目的按键绑定和针对单个应用的覆盖规则。"
+            "value": "把所有设置恢复为出厂状态。"
           }
         }
       }
@@ -1932,12 +1932,12 @@
         }
       }
     },
-    "Stops previews and window management without quitting the app.": {
+    "Stops window previews without quitting the app.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "停止预览和窗口管理，但不退出应用。"
+            "value": "停止窗口预览，但不退出应用。"
           }
         }
       }

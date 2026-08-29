@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, appearance, dockItems, windowManagement, advanced, about
+    case general, appearance, advanced, about
     var id: String { rawValue }
 
     /// For AppKit surfaces, which resolve against an explicit bundle.
@@ -10,8 +10,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .appearance: "Appearance"
-        case .dockItems: "Dock Items"
-        case .windowManagement: "Window Management"
         case .advanced: "Advanced"
         case .about: "About"
         }
@@ -25,8 +23,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .appearance: "Appearance"
-        case .dockItems: "Dock Items"
-        case .windowManagement: "Window Management"
         case .advanced: "Advanced"
         case .about: "About"
         }
@@ -40,8 +36,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape.fill"
         case .appearance: "paintpalette.fill"
-        case .dockItems: "dock.rectangle"
-        case .windowManagement: "macwindow"
         case .advanced: "wrench.and.screwdriver.fill"
         case .about: "info"
         }
@@ -52,17 +46,13 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: .gray
         case .appearance: .pink
-        case .dockItems: .blue
-        case .windowManagement: .indigo
         case .advanced: .purple
         case .about: .gray
         }
     }
 
-    /// The four everyday panes.
-    static var primary: [SettingsTab] {
-        [.general, .appearance, .dockItems, .windowManagement]
-    }
+    /// The everyday panes.
+    static var primary: [SettingsTab] { [.general, .appearance] }
 
     /// Demoted into a second group: neither is part of daily use, and separating them
     /// says so without needing a header that would outweigh the rows beneath it.

@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusController: StatusItemController?
     private var panelController: PreviewPanelController?
     private var dockWatcher: DockWatcher?
-    private var windowManager: WindowManager?
+    private var inputMonitor: PreviewInputMonitor?
     private let observers = NotificationObserverBag()
     private var servicesStarted = false
 
@@ -36,16 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } != nil
         Permissions.shared.refresh()
         DockTweaks.migrateLegacyOwnershipIfNeeded(existingInstallation: existingInstallation)
-        SystemTiling.migrateLegacyOwnershipIfNeeded(existingInstallation: existingInstallation)
 
         statusController = StatusItemController()
         DockTweaks.apply()
 
         let panels = PreviewPanelController()
         panelController = panels
-        let manager = WindowManager()
-        windowManager = manager
-        let watcher = DockWatcher(panelController: panels, windowManager: manager)
+        let monitor = PreviewInputMonitor()
+        inputMonitor = monitor
+        let watcher = DockWatcher(panelController: panels, inputMonitor: monitor)
         dockWatcher = watcher
 
         let permissionObserver = NotificationCenter.default.addObserver(
@@ -68,8 +67,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // absence degrades the bubble rather than disabling the feature.
         if Permissions.shared.hasAccessibility {
             startAuthorizedServices()
-        } else {
-            SystemTiling.setManagerAvailable(false)
         }
 
         Permissions.shared.beginWatching()
@@ -86,12 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startAuthorizedServices() {
         guard Permissions.shared.hasAccessibility, !servicesStarted,
-              let dockWatcher, let windowManager else { return }
+              let dockWatcher, let inputMonitor else { return }
+        guard inputMonitor.start() else { return }
         dockWatcher.start()
-        let managerStarted = windowManager.start()
-        servicesStarted = managerStarted
-        SystemTiling.setManagerAvailable(managerStarted)
-        guard managerStarted else { return }
+        servicesStarted = true
         Task { await WindowIndex.shared.startTracking() }
     }
 
@@ -100,20 +95,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startAuthorizedServices()
         } else {
             dockWatcher?.stop()
-            windowManager?.stop()
+            inputMonitor?.stop()
             servicesStarted = false
-            SystemTiling.setManagerAvailable(false)
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         observers.removeAll()
         dockWatcher?.stop()
-        windowManager?.stop()
+        inputMonitor?.stop()
         servicesStarted = false
         Permissions.shared.stopWatching()
         DockTweaks.restore()
-        SystemTiling.setManagerAvailable(false)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

@@ -1,8 +1,7 @@
 import AppKit
 import Foundation
 
-/// Watches the pointer and decides when a preview bubble should open, change or close,
-/// and dispatches the modifier-click shortcuts bound to Dock icons.
+/// Watches the pointer and decides when a preview bubble should open, change or close.
 ///
 /// Hover detection uses a global `NSEvent` monitor rather than a `CGEventTap`. Measured,
 /// the monitor drops events — 73 of 100 delivered, 16.7 ms median gap — which is fine for
@@ -14,7 +13,7 @@ import Foundation
 @MainActor
 final class DockWatcher: BubbleKeyboardHandling {
     private let panelController: PreviewPanelController
-    private let windowManager: WindowManager
+    private let inputMonitor: PreviewInputMonitor
     private var monitor: Any?
     private let observers = NotificationObserverBag()
 
@@ -28,10 +27,6 @@ final class DockWatcher: BubbleKeyboardHandling {
 
     /// The tile the bubble is currently open for.
     private var activeTile: AXCore.DockTile?
-    private var activeApplication: NSRunningApplication?
-    /// The windows the open bubble is showing, so a batch action knows its targets
-    /// without asking for the list again and risking a different answer.
-    private var activeWindows: [WindowInfo] = []
 
     /// The most recent Dock tile geometry, kept so the event tap can hit-test a click
     /// without making an Accessibility call on the event delivery path.
@@ -62,9 +57,9 @@ final class DockWatcher: BubbleKeyboardHandling {
     /// Where the pointer was on the previous event, for hover-intent.
     private var previousPointer: CGPoint?
 
-    init(panelController: PreviewPanelController, windowManager: WindowManager) {
+    init(panelController: PreviewPanelController, inputMonitor: PreviewInputMonitor) {
         self.panelController = panelController
-        self.windowManager = windowManager
+        self.inputMonitor = inputMonitor
     }
 
     // MARK: - Lifecycle
@@ -72,9 +67,15 @@ final class DockWatcher: BubbleKeyboardHandling {
     func start() {
         guard monitor == nil else { return }
         guard let installedMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.mouseMoved],
-            handler: { [weak self] _ in
-                Task { @MainActor in self?.pointerMoved() }
+            matching: [.mouseMoved, .leftMouseDown],
+            handler: { [weak self] event in
+                Task { @MainActor in
+                    switch event.type {
+                    case .mouseMoved: self?.pointerMoved()
+                    case .leftMouseDown: self?.dockClicked(at: NSEvent.mouseLocation)
+                    default: break
+                    }
+                }
             }
         ) else {
             Log.dock.error("could not create global mouse monitor")
@@ -132,12 +133,8 @@ final class DockWatcher: BubbleKeyboardHandling {
         }
         observers.insert(terminationObserver, center: workspaceCenter)
 
-        windowManager.keyboardTarget = self
-        windowManager.dockClickHandler = { [weak self] location, modifiers, button in
-            self?.handleDockClick(at: location, modifiers: modifiers, button: button) ?? false
-        }
-
-        windowManager.bubbleScrollHandler = { [weak self] location, deltaY, deltaX, momentum in
+        inputMonitor.keyboardTarget = self
+        inputMonitor.bubbleScrollHandler = { [weak self] location, deltaY, deltaX, momentum in
             self?.handleBubbleScroll(at: location, deltaY: deltaY, deltaX: deltaX,
                                      isMomentum: momentum) ?? false
         }
@@ -152,9 +149,8 @@ final class DockWatcher: BubbleKeyboardHandling {
         pointerQueryTask = nil
         isQuerying = false
         observers.removeAll()
-        windowManager.keyboardTarget = nil
-        windowManager.dockClickHandler = nil
-        windowManager.bubbleScrollHandler = nil
+        inputMonitor.keyboardTarget = nil
+        inputMonitor.bubbleScrollHandler = nil
         closeBubble()
     }
 
@@ -309,43 +305,13 @@ final class DockWatcher: BubbleKeyboardHandling {
         }
     }
 
-    // MARK: - Dock click shortcuts
-
-    /// Called from the event tap. Must not block and must not touch Accessibility, so it
-    /// hit-tests against the tile geometry captured on the last hover.
-    ///
-    /// - Parameter location: pointer position in Accessibility (top-left origin) space.
-    /// - Returns: true when the click was consumed by a binding.
-    private func handleDockClick(at location: CGPoint,
-                                 modifiers: ModifierCombo,
-                                 button: DockMouseButton) -> Bool {
-        guard !Preferences.shared.disabled else { return false }
-
-        let appKitPoint = ScreenGeometry.appKitPoint(fromAccessibility: location)
-        guard dockStrip.contains(appKitPoint),
-              let tile = tile(at: appKitPoint, in: tileSnapshot),
-              let bundleURL = tile.bundleURL,
-              let application = runningApplication(for: bundleURL)
-        else { return false }
-
-        // An unmodified left click is the Dock's own job — never take it.
-        if modifiers.isEmpty && button == .left {
-            if Preferences.shared.hideWhenDockItemClicked { closeBubble() }
-            return false
-        }
-
-        guard let action = DockShortcutStore.shared.action(
-            forBundle: application.bundleIdentifier,
-            modifiers: modifiers,
-            button: button
-        ) else {
-            if Preferences.shared.hideWhenDockItemClicked { closeBubble() }
-            return false
-        }
-
+    /// A normal Dock click remains entirely owned by the Dock. The global monitor only
+    /// uses its cached geometry to dismiss our panel after the click.
+    private func dockClicked(at point: CGPoint) {
+        guard Preferences.shared.hideWhenDockItemClicked,
+              dockStrip.contains(point), tile(at: point, in: tileSnapshot) != nil
+        else { return }
         closeBubble()
-        WindowActions.perform(action, on: application)
-        return true
     }
 
     // MARK: - Bubble lifecycle
@@ -415,7 +381,6 @@ final class DockWatcher: BubbleKeyboardHandling {
         }
 
         activeTile = tile
-        activeApplication = application
         bubbleGeneration &+= 1
 
         panelController.show(
@@ -425,25 +390,12 @@ final class DockWatcher: BubbleKeyboardHandling {
             edge: dockEdge,
             onSelect: { [weak self] window in self?.select(window) },
             onClose: { [weak self] window in self?.close(window) },
-            onNewWindow: { [weak self] in
-                guard let application = self?.activeApplication else { return }
-                WindowActions.newWindow(for: application)
-                self?.closeBubble()
-            },
-            onMinimizeAll: { [weak self] in
-                guard let application = self?.activeApplication else { return }
-                WindowActions.minimizeAllWindows(application)
-                self?.closeBubble()
-            },
-            onCloseAll: { [weak self] in self?.closeAll() },
-            onTileAll: { [weak self] in
-                guard let application = self?.activeApplication else { return }
-                WindowActions.tileWindows(of: application)
+            onNewWindow: { [weak self, application] in
+                ApplicationActions.newWindow(for: application)
                 self?.closeBubble()
             }
         )
 
-        activeWindows = windows
         startThumbnailCapture(for: windows)
         startPeriodicRefresh(for: windows)
         startPresenceWatchdog()
@@ -569,14 +521,10 @@ final class DockWatcher: BubbleKeyboardHandling {
                     await self?.correctUnplacedSurface(pid: window.pid,
                                                        expectedFrame: window.frame)
                     self?.activeTile = nil
-                    self?.activeApplication = nil
-                    self?.activeWindows = []
                     return
                 }
                 await self?.raise(window)
                 self?.activeTile = nil
-                self?.activeApplication = nil
-                self?.activeWindows = []
                 await self?.correctUnplacedSurface(pid: window.pid,
                                                    expectedFrame: window.frame)
             }
@@ -922,29 +870,6 @@ final class DockWatcher: BubbleKeyboardHandling {
         return false
     }
 
-    /// Closes every window in the open bubble.
-    ///
-    /// Deliberately not a loop of `close(_:)`: that reconciles after each one, so a bubble
-    /// of six windows would rebuild itself six times and flicker through the sequence.
-    /// The cards all go at once, then the app is asked to close each window, and the list
-    /// is reconciled a single time at the end — which also puts back anything that refused
-    /// to close, such as a document holding an unsaved-changes sheet.
-    private func closeAll() {
-        let windows = activeWindows
-        guard !windows.isEmpty else { return }
-        for window in windows { panelController.removeWindow(window.id) }
-
-        Task { [weak self] in
-            for window in windows {
-                let pressed = await AXCore.shared.close(window: window.id, pid: window.pid)
-                if pressed, await Self.awaitDisappearance(of: window.id, pid: window.pid) {
-                    await WindowIndex.shared.noteClosed(window.id)
-                }
-            }
-            await self?.reloadActiveBubble()
-        }
-    }
-
     /// Re-reads the window list for the open bubble, used after closing a window.
     private func reloadActiveBubble() async {
         guard let tile = activeTile else { return }
@@ -1060,8 +985,6 @@ final class DockWatcher: BubbleKeyboardHandling {
         cancelWork()
         panelController.hide()
         activeTile = nil
-        activeApplication = nil
-        activeWindows = []
     }
 
     // MARK: - Keyboard navigation

@@ -7,6 +7,13 @@ INSTALL_DIR="/Applications"
 APP="$INSTALL_DIR/HyperDock.app"
 CONFIG="${CONFIG:-Debug}"
 
+# This machine keeps the full IDE as Xcode-beta while xcode-select points at the
+# standalone Command Line Tools. Select it automatically unless the caller supplied a
+# developer directory explicitly.
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode-beta.app/Contents/Developer ]; then
+  export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+fi
+
 echo "==> Generating Xcode project"
 xcodegen generate --quiet
 

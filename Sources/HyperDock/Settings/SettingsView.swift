@@ -16,11 +16,8 @@ struct SettingsView: View {
     @Bindable var selection: TabSelection
     @State private var preferences = Preferences.shared
 
-    /// Wide enough for the longest label in either language.
-    ///
-    /// Sized from English, not Chinese: "Window Management" is far longer than 窗口管理,
-    /// and a column measured for the Chinese labels truncates it. Scales with the user's
-    /// text size so it does not clip at larger sizes either.
+    /// Fixed so switching languages does not make the detail jump sideways, and scaled
+    /// so it remains readable at larger accessibility text sizes.
     @ScaledMetric(relativeTo: .body) private var sidebarWidth: CGFloat = 215
 
     var body: some View {
@@ -74,8 +71,6 @@ struct SettingsView: View {
             switch selection.current {
             case .general: GeneralPane()
             case .appearance: AppearancePane()
-            case .dockItems: DockItemsPane()
-            case .windowManagement: WindowManagementPane()
             case .advanced: AdvancedPane()
             case .about: AboutPane()
             }
@@ -147,7 +142,7 @@ struct NumberField: View {
     }
 }
 
-/// A fractional-seconds field, for the snap delays.
+/// A fractional-seconds field.
 struct DecimalField: View {
     @Binding var value: Double
     var unit: LocalizedStringKey?

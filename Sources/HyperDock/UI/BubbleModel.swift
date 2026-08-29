@@ -29,9 +29,6 @@ final class BubbleModel {
     var onSelect: (WindowInfo) -> Void = { _ in }
     var onClose: (WindowInfo) -> Void = { _ in }
     var onNewWindow: () -> Void = {}
-    var onMinimizeAll: () -> Void = {}
-    var onCloseAll: () -> Void = {}
-    var onTileAll: () -> Void = {}
 
     /// Which preview currently reads as focused, from either input.
     var focusedWindowID: CGWindowID? {
@@ -44,6 +41,11 @@ final class BubbleModel {
     var focusedWindow: WindowInfo? {
         guard let id = focusedWindowID else { return nil }
         return windows.first { $0.id == id }
+    }
+
+    /// Foremost app window, independent of the preview currently under the pointer.
+    var frontWindowID: CGWindowID? {
+        windows.min(by: { $0.stackingIndex < $1.stackingIndex })?.id
     }
 
     /// Moves keyboard focus, wrapping at both ends so holding an arrow key cycles.
@@ -76,51 +78,99 @@ final class BubbleModel {
 
     /// The thumbnail width the slider currently asks for.
     ///
-    /// The floor is deliberately generous: below roughly 140pt a window screenshot stops
-    /// being recognisable, which defeats the point of a visual switcher.
+    /// The mapping is deliberately piecewise. Almost two thirds of the control is devoted
+    /// to useful compact sizes, while the rarely needed 300+ range occupies its last 15%.
     var thumbnailWidth: CGFloat {
-        let slider = Preferences.shared.bubbleSize
-        return 140 + slider * 220   // 140…360 pt
+        CGFloat(Self.thumbnailWidth(forSliderValue: Preferences.shared.bubbleSize))
     }
 
-    /// Tile height for the current window set, driven by the mean aspect ratio so tiles
-    /// in a row share a baseline instead of jittering.
+    nonisolated static func thumbnailWidth(forSliderValue rawValue: Double) -> Double {
+        let value = min(max(rawValue, 0), 1)
+        switch value {
+        case ..<0.65:
+            return 115 + 125 * value / 0.65
+        case ..<0.85:
+            return 240 + 60 * (value - 0.65) / 0.20
+        default:
+            return 300 + 20 * (value - 0.85) / 0.15
+        }
+    }
+
+    /// Inverse used once to migrate the earlier native build without changing the size
+    /// already visible on the user's screen.
+    nonisolated static func sliderValue(forThumbnailWidth rawWidth: Double) -> Double {
+        let width = min(max(rawWidth, 115), 320)
+        switch width {
+        case ..<240:
+            return (width - 115) / 125 * 0.65
+        case ..<300:
+            return 0.65 + (width - 240) / 60 * 0.20
+        default:
+            return 0.85 + (width - 300) / 20 * 0.15
+        }
+    }
+
+    /// Maximum thumbnail height. HyperDock 1.8 fitted every window into one maximum
+    /// rectangle; it did not derive the whole row's height from the hovered app. This is
+    /// especially important for portrait windows such as iPhone Mirroring.
     var thumbnailHeight: CGFloat {
-        let ratios = windows.map(\.aspectRatio).filter { $0 > 0 }
-        let representative = ratios.isEmpty
-            ? 16.0 / 10.0
-            : ratios.reduce(0, +) / CGFloat(ratios.count)
-        // Clamped so a very tall or very wide window cannot stretch the whole row into
-        // an unusable shape.
-        let clamped = min(max(representative, 0.8), 2.4)
-        return (thumbnailWidth / clamped).rounded()
+        // The old 4:3 item rectangle reserved 26 pt vertically and 14 pt horizontally:
+        // h = 0.75 × (effectiveWidth + 14) - 26.
+        (thumbnailWidth * 0.75 - 15.5).rounded()
+    }
+
+    /// Aspect-fitted size inside the fixed maximum preview rectangle used by the old
+    /// helper. Wide windows consume the maximum width; tall windows consume the maximum
+    /// height and become narrower instead of making the bubble taller.
+    nonisolated static func fittedThumbnailSize(aspectRatio: CGFloat,
+                                                 maximum: CGSize) -> CGSize {
+        let ratio = min(max(aspectRatio, 0.1), 10)
+        let maximumRatio = maximum.width / maximum.height
+        if ratio >= maximumRatio {
+            return CGSize(width: maximum.width,
+                          height: max(1, (maximum.width / ratio).rounded()))
+        }
+        return CGSize(width: max(1, (maximum.height * ratio).rounded()),
+                      height: maximum.height)
+    }
+
+    func thumbnailSize(for window: WindowInfo) -> CGSize {
+        Self.fittedThumbnailSize(
+            aspectRatio: window.aspectRatio,
+            maximum: CGSize(width: thumbnailWidth, height: thumbnailHeight)
+        )
+    }
+
+    var rows: [[WindowInfo]] {
+        let columns = columnCount
+        guard columns > 0 else { return [] }
+        return stride(from: 0, to: windows.count, by: columns).map { start in
+            Array(windows[start..<min(start + columns, windows.count)])
+        }
     }
 
     /// Columns to lay the previews out in.
     ///
-    /// The user's "previews per row" is a *maximum*, not a target. Filling each row to
-    /// the limit leaves the last row nearly empty — six windows at a limit of five gives
-    /// a row of five and a row of one, a wide bubble with a large hole in it. Spreading
-    /// the same windows evenly across the rows they need (three and three) is both
-    /// tidier and a smaller pointer journey.
+    /// HyperDock fills one row to the configured maximum before beginning the next.
+    /// At the original default, six previews are therefore arranged as 5 + 1.
     var columnCount: Int {
         let limit = max(1, Preferences.shared.previewsPerRow)
-        let count = windows.count
-        guard count > 0 else { return 1 }
-        let rows = Int(ceil(Double(count) / Double(limit)))
-        return Int(ceil(Double(count) / Double(max(1, rows))))
+        return min(max(1, windows.count), limit)
     }
 
     func metrics(for edge: DockEdge) -> Metrics {
         let columns = columnCount
-        let rows = max(1, Int(ceil(Double(windows.count) / Double(columns))))
+        let previewRows = rows
+        let rowWidths = previewRows.map { row in
+            row.reduce(CGFloat.zero) { $0 + thumbnailSize(for: $1).width }
+                + CGFloat(max(0, row.count - 1)) * Design.cardGap
+        }
+        let contentWidth = max(rowWidths.max() ?? thumbnailWidth, thumbnailWidth)
+        let width = contentWidth + Design.bubblePadding * 2
 
-        let width = CGFloat(columns) * thumbnailWidth
-            + CGFloat(columns - 1) * Design.cardGap
-            + Design.bubblePadding * 2
-
-        var height = CGFloat(rows) * (thumbnailHeight + Design.titleGap + Design.titleHeight)
-            + CGFloat(rows - 1) * Design.cardGap
+        let rowCount = max(1, previewRows.count)
+        var height = CGFloat(rowCount) * (thumbnailHeight + Design.titleGap + Design.titleHeight)
+            + CGFloat(rowCount - 1) * Design.cardGap
             + Design.bubblePadding * 2
         if Preferences.shared.showApplicationName {
             height += Design.headerHeight + Design.titleGap
@@ -163,7 +213,7 @@ final class BubbleModel {
             snapScale = 1
             return
         }
-        snapScale = 0.96
+        snapScale = 0.92
         withAnimation(Design.appear) { snapScale = 1 }
     }
 }

@@ -229,7 +229,7 @@ actor WindowIndex {
         }
         let closed = Set(closedIDs.keys)
 
-        var results: [WindowInfo] = raw.compactMap { entry -> WindowInfo? in
+        var results: [WindowInfo] = raw.enumerated().compactMap { stackingIndex, entry -> WindowInfo? in
             guard let owner = entry[kCGWindowOwnerPID as String] as? pid_t, owner == pid,
                   let id = entry[kCGWindowNumber as String] as? CGWindowID,
                   !closed.contains(id),
@@ -286,6 +286,7 @@ actor WindowIndex {
                 title: title,
                 applicationName: applicationName,
                 frame: frame,
+                stackingIndex: stackingIndex,
                 spaceNumber: placement.spaceNumber,
                 isOnCurrentSpace: placement.isOnCurrentSpace,
                 isMinimized: minimized,
@@ -353,16 +354,13 @@ actor WindowIndex {
         var sorted = windows
 
         switch options.order {
-        case .title:
-            sorted.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         case .creationTime:
             // Window ids increase monotonically, so a larger id is a newer window.
             sorted.sort { $0.id < $1.id }
-        case .stackingOrder:
-            // CGWindowList already returns windows front-to-back, so the incoming order
-            // *is* the stacking order — sorting by id here would silently make this
-            // identical to creation time, which is what an earlier version did.
-            break
+        case .recentUsage:
+            // WindowServer's front-to-back order is the surviving system equivalent of
+            // the original helper's per-window recent-usage order.
+            sorted.sort { $0.stackingIndex < $1.stackingIndex }
         }
 
         if options.currentSpaceFirst {

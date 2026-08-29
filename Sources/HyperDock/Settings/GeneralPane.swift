@@ -49,8 +49,7 @@ struct GeneralPane: View {
             Section("Order") {
                 Picker("Sort windows by", selection: $preferences.windowOrder) {
                     Text("Creation time").tag(WindowOrder.creationTime)
-                    Text("Title").tag(WindowOrder.title)
-                    Text("Stacking order").tag(WindowOrder.stackingOrder)
+                    Text("Recent usage").tag(WindowOrder.recentUsage)
                 }
                 Toggle(isOn: $preferences.currentSpaceWindowsFirst) {
                     Text("Show windows from this space first")
@@ -82,7 +81,7 @@ struct GeneralPane: View {
                     Text("Reset All Settings…")
                 }
             } footer: {
-                Text("Puts every setting back to how it shipped, including the Dock Items bindings and any per-app overrides.")
+                Text("Puts every setting back to how it shipped.")
             }
         }
     }
@@ -97,7 +96,7 @@ struct GeneralPane: View {
         let alert = NSAlert()
         alert.messageText = Localization.string("Reset all settings?")
         alert.informativeText = Localization.string(
-            "Every preference returns to its default, per-app Dock bindings are removed, HyperDock stops opening at login, and your Dock's own settings are restored. This cannot be undone.")
+            "Every preference returns to its default, HyperDock stops opening at login, and your Dock's own settings are restored. This cannot be undone.")
         alert.alertStyle = .warning
         alert.addButton(withTitle: Localization.string("Reset"))
         alert.addButton(withTitle: Localization.string("Cancel"))
@@ -120,16 +119,12 @@ struct GeneralPane: View {
         // These snapshots live in our defaults. Restore them before the persistent
         // domain is cleared, then re-apply the freshly reset HyperDock defaults below.
         DockTweaks.restore()
-        SystemTiling.restore()
         Preferences.shared.resetToDefaults()
-        DockShortcutStore.shared.resetToDefaults()
         // Reset clears our migration markers too. Re-establish them as a clean install
         // before applying defaults, or the next launch could mistake these new values for
         // an un-migrated legacy override.
         DockTweaks.migrateLegacyOwnershipIfNeeded(existingInstallation: false)
-        SystemTiling.migrateLegacyOwnershipIfNeeded(existingInstallation: false)
         DockTweaks.apply()
-        SystemTiling.apply()
     }
 }
 
@@ -147,7 +142,7 @@ struct PermissionsNotice: View {
             if !permissions.hasAccessibility {
                 row(
                     title: "Accessibility access is required",
-                    detail: "Lets HyperDock read Dock icons and raise, close and move windows.",
+                    detail: "Lets HyperDock read Dock icons and raise or close windows.",
                     action: "Open Accessibility Settings",
                     perform: permissions.openAccessibilitySettings
                 )

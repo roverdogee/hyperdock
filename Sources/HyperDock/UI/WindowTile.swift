@@ -8,30 +8,31 @@ import SwiftUI
 /// cards, which makes the current target unmistakable at a glance — the thing that
 /// matters when this surface is only on screen for a moment.
 ///
-/// Two departures from the original are deliberate:
-///
-///  * A window on another Space keeps a **bright, readable thumbnail**. The original
-///    covers it with a heavy scrim, which signals "elsewhere" at the cost of the
-///    thumbnail — and the thumbnail is how the user recognises the window in the first
-///    place. The Space is communicated with a badge instead.
-///  * Only a **minimised** window is desaturated, because it genuinely is not on any
-///    screen, so there is no live state to misrepresent.
+/// The visual treatment follows HyperDock 1.8, including dimming windows that are not
+/// on the current Space and using the original close-button artwork.
 struct WindowTile: View {
     let window: WindowInfo
     let thumbnail: Thumbnail?
     let width: CGFloat
     let height: CGFloat
+    let maximumHeight: CGFloat
     let isFocused: Bool
+    let isFrontWindow: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
 
     @State private var preferences = Preferences.shared
+    @State private var closeButtonIsVisible = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: Design.titleGap) {
             card
+                // The old screenshot layer centred its contents in the maximum preview
+                // rectangle on both axes. The title remains on the shared row baseline.
+                .frame(width: width, height: maximumHeight, alignment: .center)
             title
         }
         .frame(width: width)
@@ -51,6 +52,13 @@ struct WindowTile: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onSelect() }
         .accessibilityAction(named: Text("Close window")) { onClose() }
+        .task(id: isFocused) {
+            closeButtonIsVisible = false
+            guard isFocused else { return }
+            try? await Task.sleep(for: .milliseconds(max(0, preferences.closeButtonDelay)))
+            guard !Task.isCancelled else { return }
+            closeButtonIsVisible = true
+        }
     }
 
     // MARK: Card
@@ -69,12 +77,28 @@ struct WindowTile: View {
     /// off screen, but its thumbnail is still how the user recognises it, and the badge
     /// already says where it is — draining it too would cost recognition and buy nothing.
     private var dimmed: Bool {
-        window.isMinimized && preferences.shadeInvisibleWindows
+        (window.isMinimized || !window.isOnCurrentSpace) && preferences.shadeInvisibleWindows
     }
 
     private var card: some View {
         ZStack {
             thumbnailLayer
+            if isFrontWindow {
+                RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(0.42), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            if highlighted {
+                RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.18), .clear, .white.opacity(0.08)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .allowsHitTesting(false)
+            }
             if preferences.showSpaceIndicator { badge }
             // Visible only on focus, but present in the view tree either way.
             //
@@ -87,23 +111,12 @@ struct WindowTile: View {
             // pointer-free route regardless.
             if preferences.showCloseButton {
                 closeButton
-                    .opacity(isFocused ? 1 : 0)
-                    .motion(Design.focus, value: isFocused, reduced: reduceMotion)
+                    .opacity(closeButtonIsVisible ? 1 : 0)
+                    .motion(Design.focus, value: closeButtonIsVisible, reduced: reduceMotion)
             }
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
-                .strokeBorder(
-                    highlighted ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.10)),
-                    lineWidth: highlighted ? 2 : 1
-                )
-        }
-        // The lift reads as depth rather than as a glow, so the shadow grows with it.
-        .shadow(color: .black.opacity(highlighted ? 0.34 : 0.16),
-                radius: highlighted ? 10 : 3,
-                y: highlighted ? 4 : 1)
         .scaleEffect(highlighted ? Design.focusScale : 1)
         .motion(Design.focus, value: highlighted, reduced: reduceMotion)
     }
@@ -113,11 +126,11 @@ struct WindowTile: View {
         if let thumbnail {
             Image(decorative: thumbnail.image, scale: 1)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
+                .aspectRatio(contentMode: .fit)
                 // A minimised window is not on any screen, so its pixels are a memory.
                 // Draining the colour says that without hiding what the window is.
-                .saturation(dimmed ? 0.35 : 1)
-                .opacity(dimmed ? 0.75 : 1)
+                .saturation(dimmed ? 0.45 : 1)
+                .opacity(dimmed ? 0.58 : 1)
         } else {
             // A neutral plate rather than a spinner: thumbnails land within ~130 ms and a
             // spinner that appears and vanishes that fast is just a flicker.
@@ -183,38 +196,67 @@ struct WindowTile: View {
     private var closeButton: some View {
         VStack {
             HStack {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 18, height: 18)
-                        .background(.thinMaterial, in: Circle())
-                        .overlay { Circle().strokeBorder(.white.opacity(0.18), lineWidth: 0.5) }
-                        // A generous hit area around a small glyph: the visible control
-                        // stays unobtrusive while remaining easy to actually hit.
-                        .contentShape(Rectangle().inset(by: -6))
-                }
-                .buttonStyle(.plain)
+                Button(action: onClose) { Color.clear }
+                    .buttonStyle(OriginalCloseButtonStyle(
+                        normalAsset: closeButtonAsset,
+                        pressedAsset: closeButtonPressedAsset,
+                        size: usesLightBubble ? 30 : 28
+                    ))
                 .accessibilityLabel(Text("Close window"))
                 Spacer()
             }
             Spacer()
         }
-        .padding(6)
+        // The archived artwork already contains a one-point transparent margin. Adding
+        // layout padding on top of it made the visible circle float too far inward.
+        // Align its canvas directly with the screenshot's top-leading corner instead.
+    }
+
+    private var usesLightBubble: Bool {
+        preferences.theme == .vibrantLight
+            || (preferences.theme == .automatic && colorScheme == .light)
+    }
+
+    private var closeButtonAsset: String {
+        usesLightBubble ? "closebox" : "closebox_white"
+    }
+
+    private var closeButtonPressedAsset: String {
+        // The archived bundle only supplies a separate pressed image for the white
+        // control; the dark glyph uses the normal artwork with the pressed transform.
+        usesLightBubble ? "closebox" : "closebox_white_pressed"
     }
 
     // MARK: Title
 
     private var title: some View {
-        Text(displayTitle)
-            .font(highlighted ? Design.titleFocusedFont : Design.titleFont)
-            .lineLimit(1)
-            // Middle truncation keeps both ends: many windows in one app differ only in
-            // a leading path or a trailing filename, and tail truncation would hide it.
-            .truncationMode(.middle)
-            .foregroundStyle(highlighted ? .primary : .secondary)
-            .frame(width: width, height: Design.titleHeight)
-            .help(Text(displayTitle))
+        Group {
+            if hasDistinctWindowTitle {
+                Text(displayTitle)
+                    .font(highlighted ? Design.titleFocusedFont : Design.titleFont)
+                    .lineLimit(1)
+                    // Middle truncation keeps both ends: many windows in one app differ
+                    // only in a leading path or trailing filename.
+                    .truncationMode(.middle)
+                    .foregroundStyle(titleColor.opacity(highlighted ? 1 : 0.88))
+                    .help(Text(displayTitle))
+            } else {
+                // Keep a common card baseline while avoiding "ChatGPT" appearing once
+                // as the app heading and again as a non-distinct window title.
+                Color.clear
+            }
+        }
+        .frame(width: width, height: Design.titleHeight)
+    }
+
+    private var hasDistinctWindowTitle: Bool {
+        let title = window.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let app = window.applicationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !title.isEmpty && title.localizedCaseInsensitiveCompare(app) != .orderedSame
+    }
+
+    private var titleColor: Color {
+        usesLightBubble ? .black : .white
     }
 
     /// Falls back to the application name so a window with no title is still identifiable
@@ -231,5 +273,33 @@ struct WindowTile: View {
             parts.append(String(format: Localization.string("Desktop %d"), number))
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+private struct OriginalCloseButtonStyle: ButtonStyle {
+    let normalAsset: String
+    let pressedAsset: String
+    let size: CGFloat
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        let asset = configuration.isPressed ? pressedAsset : normalAsset
+        Group {
+            if let image = OriginalHyperDockAssets.image(asset) {
+                image
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                Image(systemName: "xmark.circle.fill")
+                    .resizable()
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.secondary, .regularMaterial)
+            }
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(configuration.isPressed ? 0.94 : 1)
+        .opacity(configuration.isPressed ? 0.82 : 1)
+        .shadow(color: .black.opacity(0.45), radius: 1.5, y: 1)
+        .contentShape(Rectangle().inset(by: -4))
     }
 }

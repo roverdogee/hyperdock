@@ -31,7 +31,7 @@ struct BubbleShape: Shape {
         set { pointerPosition = newValue }
     }
 
-    func path(in rect: CGRect) -> Path {
+    nonisolated func path(in rect: CGRect) -> Path {
         guard showsPointer else {
             return Path(roundedRect: rect, cornerRadius: cornerRadius)
         }

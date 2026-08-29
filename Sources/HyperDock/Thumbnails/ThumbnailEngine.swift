@@ -28,6 +28,7 @@ actor ThumbnailEngine {
     /// the capture daemon.
     private static let maxConcurrentCaptures = 4
     private static let cacheLimit = 64
+    private static let captureAttempts = 3
 
     private var cache: [CGWindowID: Thumbnail] = [:]
 
@@ -50,6 +51,14 @@ actor ThumbnailEngine {
                  targetWidth: CGFloat,
                  onReady: @escaping @Sendable (CGWindowID, Thumbnail) -> Void) async {
         guard !Task.isCancelled else { return }
+
+        // HyperDock 1.8 displayed its cached prototype before starting the independent
+        // load operation. Do the same so a transient ScreenCaptureKit omission never
+        // turns a previously captured window back into an empty card.
+        for window in windows {
+            if let thumbnail = cache[window.id] { onReady(window.id, thumbnail) }
+        }
+
         // One listing for the whole batch. It costs 46–57 ms, so doing it per window —
         // as an earlier version did — added more latency than every capture combined.
         guard let content = try? await SCShareableContent.excludingDesktopWindows(
@@ -80,35 +89,26 @@ actor ThumbnailEngine {
         )
         await WindowIndex.shared.recordTitleSnapshot(titleSnapshot)
 
-        await withTaskGroup(of: Void.self) { group in
-            var iterator = windows.makeIterator()
-            var active = 0
+        var pending = windows
+        var currentHandles = handles
+        for attempt in 0..<Self.captureAttempts where !pending.isEmpty {
+            pending = await captureRound(pending,
+                                         handles: currentHandles,
+                                         targetWidth: targetWidth,
+                                         onReady: onReady)
+            guard !Task.isCancelled, !pending.isEmpty,
+                  attempt + 1 < Self.captureAttempts else { break }
 
-            // A sliding window: keep exactly `maxConcurrentCaptures` in flight, starting
-            // the next capture each time one finishes.
-            func startNext() -> Bool {
-                guard !Task.isCancelled else { return false }
-                while let window = iterator.next() {
-                    guard let handle = handles[window.id] else { continue }
-                    group.addTask { [weak self] in
-                        guard !Task.isCancelled, let self else { return }
-                        if let thumbnail = await self.performCapture(
-                            window, handle: handle, targetWidth: targetWidth
-                        ), !Task.isCancelled {
-                            onReady(window.id, thumbnail)
-                        }
-                    }
-                    return true
-                }
-                return false
-            }
-
-            while active < Self.maxConcurrentCaptures, startNext() { active += 1 }
-            while active > 0 {
-                await group.next()
-                active -= 1
-                if startNext() { active += 1 }
-            }
+            // Window IDs can reach CGWindowList slightly before ScreenCaptureKit publishes
+            // their SCWindow handles. The old helper's per-window operations naturally
+            // retried that race; refresh the listing and try the unresolved windows again.
+            try? await Task.sleep(for: .milliseconds(90 * (attempt + 1)))
+            guard !Task.isCancelled,
+                  let refreshed = try? await SCShareableContent.excludingDesktopWindows(
+                    true, onScreenWindowsOnly: false) else { continue }
+            currentHandles = Dictionary(uniqueKeysWithValues: refreshed.windows.map {
+                ($0.windowID, ShareableWindow(window: $0))
+            })
         }
     }
 
@@ -150,6 +150,52 @@ actor ThumbnailEngine {
 
     // MARK: - Capture
 
+    /// Runs one capture attempt for a batch and returns only unresolved windows. Four
+    /// operations are kept in flight, matching the measured capture-daemon sweet spot.
+    private func captureRound(
+        _ windows: [WindowInfo],
+        handles: [CGWindowID: ShareableWindow],
+        targetWidth: CGFloat,
+        onReady: @escaping @Sendable (CGWindowID, Thumbnail) -> Void
+    ) async -> [WindowInfo] {
+        await withTaskGroup(of: (WindowInfo, Thumbnail?).self,
+                            returning: [WindowInfo].self) { group in
+            var iterator = windows.makeIterator()
+            var active = 0
+            var unresolved: [WindowInfo] = []
+
+            func startNext() -> Bool {
+                guard !Task.isCancelled, let window = iterator.next() else { return false }
+                guard let handle = handles[window.id] else {
+                    unresolved.append(window)
+                    return startNext()
+                }
+                group.addTask { [weak self] in
+                    guard !Task.isCancelled, let self else { return (window, nil) }
+                    let thumbnail = await self.performCapture(
+                        window, handle: handle, targetWidth: targetWidth
+                    )
+                    return (window, thumbnail)
+                }
+                return true
+            }
+
+            while active < Self.maxConcurrentCaptures, startNext() { active += 1 }
+            while active > 0 {
+                if let (window, thumbnail) = await group.next() {
+                    active -= 1
+                    if let thumbnail, !Task.isCancelled {
+                        onReady(window.id, thumbnail)
+                    } else {
+                        unresolved.append(window)
+                    }
+                }
+                if startNext() { active += 1 }
+            }
+            return unresolved
+        }
+    }
+
     private func performCapture(_ window: WindowInfo,
                                 handle: ShareableWindow,
                                 targetWidth: CGFloat) async -> Thumbnail? {
@@ -188,7 +234,7 @@ actor ThumbnailEngine {
             // with a message about audio/video capture failure. That is a routine race
             // in a hover UI, not a fault worth surfacing — fall back to the last image.
             Log.thumbnails.debug("capture failed for \(window.id): \(error.localizedDescription, privacy: .public)")
-            return cache[window.id]
+            return nil
         }
     }
 }

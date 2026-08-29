@@ -9,9 +9,8 @@ struct AdvancedPane: View {
                 Toggle(isOn: $preferences.disabled) {
                     Text("Turn HyperDock off")
                 }
-                .onChange(of: preferences.disabled) { _, _ in SystemTiling.apply() }
             } header: { EmptyView() } footer: {
-                Text("Stops previews and window management without quitting the app.")
+                Text("Stops window previews without quitting the app.")
             }
 
             Section {
@@ -25,6 +24,10 @@ struct AdvancedPane: View {
                 }
                 LabeledContent("Later full size previews") {
                     NumberField(value: $preferences.fullSizePreviewDelaySubsequent,
+                                range: 0...5000, unit: "ms")
+                }
+                LabeledContent("Close button delay") {
+                    NumberField(value: $preferences.closeButtonDelay,
                                 range: 0...5000, unit: "ms")
                 }
             } header: { Text("Timing") } footer: {

@@ -4,12 +4,13 @@ import Observation
 // MARK: - Enumerations
 
 enum AppearanceTheme: String, CaseIterable, Identifiable, Sendable {
-    case automatic, light, dark
+    // Names and order recovered from HyperDock 1.8's Appearance preference pane.
+    case automatic, classic, vibrantLight, vibrantDark
     var id: String { rawValue }
 }
 
 enum WindowOrder: String, CaseIterable, Identifiable, Sendable {
-    case creationTime, title, stackingOrder
+    case creationTime, recentUsage
     var id: String { rawValue }
 }
 
@@ -62,6 +63,15 @@ struct ModifierCombo: OptionSet, Sendable, Codable, Hashable {
     static let userSelectable: [ModifierCombo] = [.control, .option, .command, .shift]
     static let userSelectableSet: ModifierCombo = [.control, .option, .command, .shift]
 
+    init(eventFlags flags: CGEventFlags) {
+        var value: ModifierCombo = []
+        if flags.contains(.maskControl) { value.insert(.control) }
+        if flags.contains(.maskAlternate) { value.insert(.option) }
+        if flags.contains(.maskCommand) { value.insert(.command) }
+        if flags.contains(.maskShift) { value.insert(.shift) }
+        self = value
+    }
+
     var eventFlags: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []
         if contains(.control) { flags.insert(.control) }
@@ -85,7 +95,22 @@ final class Preferences {
     static let shared = Preferences()
 
     private let store = UserDefaults.standard
-    private init() {}
+    private init() {
+        migrateThumbnailSizeMappingIfNeeded()
+    }
+
+    /// Preserves the visible size chosen in builds whose 0…1 slider meant 150…350 pt.
+    /// A setting that was never written instead receives the new old-HyperDock default.
+    private func migrateThumbnailSizeMappingIfNeeded() {
+        let versionKey = "thumbnailSizeMappingVersion"
+        guard store.integer(forKey: versionKey) < 2 else { return }
+        if let oldSlider = store.object(forKey: "bubbleSize") as? Double {
+            let oldWidth = 150 + min(max(oldSlider, 0), 1) * 200
+            store.set(BubbleModel.sliderValue(forThumbnailWidth: oldWidth),
+                      forKey: "bubbleSize")
+        }
+        store.set(2, forKey: versionKey)
+    }
 
     /// Bumped whenever any setting is written.
     ///
@@ -147,7 +172,15 @@ final class Preferences {
     }
 
     var windowOrder: WindowOrder {
-        get { observed { enumValue("windowOrder", default: .creationTime) } }
+        get {
+            observed {
+                switch store.string(forKey: "windowOrder") {
+                case "stackingOrder": return .recentUsage
+                case "title": return .creationTime
+                default: return enumValue("windowOrder", default: .creationTime)
+                }
+            }
+        }
         set { write(newValue.rawValue, "windowOrder") }
     }
 
@@ -193,7 +226,17 @@ final class Preferences {
     // MARK: Appearance
 
     var theme: AppearanceTheme {
-        get { observed { enumValue("theme", default: .automatic) } }
+        get {
+            observed {
+                // Migrate the compatibility build's earlier light/dark values to the
+                // corresponding original HyperDock choices.
+                switch store.string(forKey: "theme") {
+                case "light": return .vibrantLight
+                case "dark": return .vibrantDark
+                default: return enumValue("theme", default: .automatic)
+                }
+            }
+        }
         set { write(newValue.rawValue, "theme") }
     }
 
@@ -205,6 +248,12 @@ final class Preferences {
     var showCloseButton: Bool {
         get { observed { bool("showCloseButton", default: true) } }
         set { write(newValue, "showCloseButton") }
+    }
+
+    /// HyperDock 1.8 waited half a second before revealing a preview's close box.
+    var closeButtonDelay: Int {
+        get { observed { int("closeButtonDelay", default: 500) } }
+        set { write(newValue, "closeButtonDelay") }
     }
 
     var showSpaceIndicator: Bool {
@@ -220,7 +269,9 @@ final class Preferences {
 
     /// Relative bubble scale, 0…1, mapped to a thumbnail width range.
     var bubbleSize: Double {
-        get { observed { double("bubbleSize", default: 0.35) } }
+        // 0.473 maps to an effective 206 pt screenshot: HyperDock 1.8's 220 pt
+        // shipping setting after its internal 14 pt horizontal inset.
+        get { observed { double("bubbleSize", default: 0.4732) } }
         set { write(newValue, "bubbleSize") }
     }
 
@@ -247,77 +298,6 @@ final class Preferences {
     var shadeInvisibleWindows: Bool {
         get { observed { bool("shadeInvisibleWindows", default: true) } }
         set { write(newValue, "shadeInvisibleWindows") }
-    }
-
-    // MARK: Window management
-
-    var snapOnDragToEdge: Bool {
-        get { observed { bool("snapOnDragToEdge", default: true) } }
-        set { write(newValue, "snapOnDragToEdge") }
-    }
-
-    var snapDelayNearBorder: Double {
-        get { observed { double("snapDelayNearBorder", default: 0.5) } }
-        set { write(newValue, "snapDelayNearBorder") }
-    }
-
-    var snapDelayExactBorder: Double {
-        get { observed { double("snapDelayExactBorder", default: 0) } }
-        set { write(newValue, "snapDelayExactBorder") }
-    }
-
-    /// Scrolling on a window's title bar snaps it, or moves it between Spaces.
-    var scrollTitlebarEnabled: Bool {
-        get { observed { bool("scrollTitlebarEnabled", default: false) } }
-        set { write(newValue, "scrollTitlebarEnabled") }
-    }
-
-    var keyboardSnapEnabled: Bool {
-        get { observed { bool("keyboardSnapEnabled", default: true) } }
-        set { write(newValue, "keyboardSnapEnabled") }
-    }
-
-    var keyboardSnapModifiers: ModifierCombo {
-        get { observed { modifiers("keyboardSnapModifiers", default: [.control, .option]) } }
-        set { write(newValue.rawValue, "keyboardSnapModifiers") }
-    }
-
-    var moveWindowsEnabled: Bool {
-        get { observed { bool("moveWindowsEnabled", default: true) } }
-        set { write(newValue, "moveWindowsEnabled") }
-    }
-
-    var moveWindowsModifiers: ModifierCombo {
-        get { observed { modifiers("moveWindowsModifiers", default: [.control, .option]) } }
-        set { write(newValue.rawValue, "moveWindowsModifiers") }
-    }
-
-    var resizeWindowsEnabled: Bool {
-        get { observed { bool("resizeWindowsEnabled", default: true) } }
-        set { write(newValue, "resizeWindowsEnabled") }
-    }
-
-    var resizeWindowsModifiers: ModifierCombo {
-        get { observed { modifiers("resizeWindowsModifiers", default: [.control, .option, .shift]) } }
-        set { write(newValue.rawValue, "resizeWindowsModifiers") }
-    }
-
-    /// Columns to tile into, or 0 to derive the grid from the screen's proportions.
-    var tileGridColumns: Int {
-        get { observed { int("tileGridColumns", default: 0) } }
-        set { write(max(0, newValue), "tileGridColumns") }
-    }
-
-    /// Rows to tile into, or 0 to derive them.
-    var tileGridRows: Int {
-        get { observed { int("tileGridRows", default: 0) } }
-        set { write(max(0, newValue), "tileGridRows") }
-    }
-
-    /// Points left between tiled windows.
-    var tileGridGap: Int {
-        get { observed { int("tileGridGap", default: 0) } }
-        set { write(max(0, newValue), "tileGridGap") }
     }
 
     // MARK: Advanced
@@ -422,7 +402,7 @@ final class Preferences {
     /// whatever prompted it.
     ///
     /// Side effects outside the domain are the caller's to finish: the login item and the
-    /// two keys written into the Dock's own domain both live elsewhere.
+    /// Dock key written into the Dock's own domain both live elsewhere.
     func resetToDefaults() {
         if let domain = Bundle.main.bundleIdentifier {
             store.removePersistentDomain(forName: domain)

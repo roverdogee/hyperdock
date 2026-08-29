@@ -30,8 +30,14 @@ final class PreviewPanel: NSPanel {
         hidesOnDeactivate = false
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
-        level = .popUpMenu
+        // HyperDock's original nine-slice artwork already contains its own shadow.
+        // Asking AppKit for another one creates the repeated black outlines visible in
+        // early compatibility builds.
+        hasShadow = false
+        // Dock title bubbles sit above ordinary pop-up-menu windows. The original helper
+        // used a private high window level; screen-saver level is the closest stable
+        // public equivalent and lets our bubble cover the Dock's duplicate app label.
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)))
         collectionBehavior = [
             .canJoinAllSpaces,
             .fullScreenAuxiliary,
@@ -106,6 +112,7 @@ final class PreviewPanelController {
     private let model = BubbleModel()
     private var hostingView: NSHostingView<BubbleRoot>?
     private let fullSize = FullSizePreviewController()
+    private let dockTooltip = DockTooltipSuppressor()
     private var lastHovered: CGWindowID?
     /// Distinguishes stale animation completions and protects click-driven hides.
     private var visibilityState = PreviewVisibilityState()
@@ -141,8 +148,9 @@ final class PreviewPanelController {
     func applyTheme() {
         switch Preferences.shared.theme {
         case .automatic: panel.appearance = nil
-        case .light: panel.appearance = NSAppearance(named: .aqua)
-        case .dark: panel.appearance = NSAppearance(named: .darkAqua)
+        case .classic: panel.appearance = NSAppearance(named: .darkAqua)
+        case .vibrantLight: panel.appearance = NSAppearance(named: .vibrantLight)
+        case .vibrantDark: panel.appearance = NSAppearance(named: .vibrantDark)
         }
     }
 
@@ -188,10 +196,7 @@ final class PreviewPanelController {
               edge: DockEdge,
               onSelect: @escaping (WindowInfo) -> Void,
               onClose: @escaping (WindowInfo) -> Void,
-              onNewWindow: @escaping () -> Void,
-              onMinimizeAll: @escaping () -> Void,
-              onCloseAll: @escaping () -> Void,
-              onTileAll: @escaping () -> Void) {
+              onNewWindow: @escaping () -> Void) {
         // A click has committed to a Space switch that must happen only after this
         // all-Spaces panel is gone. Ignore transient reloads until that barrier drains.
         guard let generation = visibilityState.beginShow() else { return }
@@ -201,11 +206,9 @@ final class PreviewPanelController {
         model.onSelect = onSelect
         model.onClose = onClose
         model.onNewWindow = onNewWindow
-        model.onMinimizeAll = onMinimizeAll
-        model.onCloseAll = onCloseAll
-        model.onTileAll = onTileAll
 
         lastTileFrame = tileFrame
+        dockTooltip.suppress(around: tileFrame)
         let wasVisible = panel.isVisible
         layout(around: tileFrame, edge: edge, animated: wasVisible)
 
@@ -217,7 +220,7 @@ final class PreviewPanelController {
             // A show can supersede a fade-out that is still in flight. Restore the
             // visible state immediately; the old completion is rejected by generation.
             panel.alphaValue = 1
-            panel.hasShadow = true
+            panel.hasShadow = false
             panel.orderFrontRegardless()
         }
     }
@@ -237,6 +240,7 @@ final class PreviewPanelController {
             pendingHideCompletions.append(completion)
         }
         fullSize.hide()
+        dockTooltip.restore()
         lastHovered = nil
         lastTileFrame = nil
 
@@ -283,7 +287,7 @@ final class PreviewPanelController {
     private func finishHiding() {
         panel.orderOut(nil)
         panel.alphaValue = 1
-        panel.hasShadow = true
+        panel.hasShadow = false
         model.clear()
     }
 
@@ -359,25 +363,39 @@ final class PreviewPanelController {
         let gap = CGFloat(Preferences.shared.distanceFromDock)
 
         var origin = CGPoint.zero
+        let screen = ScreenGeometry.screen(containing: CGPoint(x: tile.midX, y: tile.midY))
+        let visible = screen?.visibleFrame
+        let fullScreen = screen?.frame
         switch edge {
         case .bottom:
             origin.x = tile.midX - metrics.size.width / 2
-            origin.y = tile.maxY + gap
+            let dockTop = visible.flatMap { area in
+                guard let fullScreen, area.minY > fullScreen.minY + 1 else { return nil }
+                return area.minY
+            } ?? tile.maxY
+            origin.y = dockTop + gap
         case .left:
-            origin.x = tile.maxX + gap
+            let dockRight = visible.flatMap { area in
+                guard let fullScreen, area.minX > fullScreen.minX + 1 else { return nil }
+                return area.minX
+            } ?? tile.maxX
+            origin.x = dockRight + gap
             origin.y = tile.midY - metrics.size.height / 2
         case .right:
-            origin.x = tile.minX - metrics.size.width - gap
+            let dockLeft = visible.flatMap { area in
+                guard let fullScreen, area.maxX < fullScreen.maxX - 1 else { return nil }
+                return area.maxX
+            } ?? tile.minX
+            origin.x = dockLeft - metrics.size.width - gap
             origin.y = tile.midY - metrics.size.height / 2
         }
 
         // Keep the bubble on screen; the pointer then slides to stay aimed at the icon
         // rather than the whole bubble hanging off the edge.
-        if let screen = ScreenGeometry.screen(containing: CGPoint(x: tile.midX, y: tile.midY)) {
-            let visible = screen.visibleFrame
+        if let visible {
             origin.x = min(max(origin.x, visible.minX + 6),
                            visible.maxX - metrics.size.width - 6)
-            origin.y = min(max(origin.y, visible.minY + 6),
+            origin.y = min(max(origin.y, visible.minY),
                            visible.maxY - metrics.size.height - 6)
         }
 
@@ -453,7 +471,7 @@ final class PreviewPanelController {
     }
 
     private func settleShadow() {
-        panel.hasShadow = true
-        panel.invalidateShadow()
+        // Shadow is baked into the original nine-slice artwork.
+        panel.hasShadow = false
     }
 }

@@ -37,8 +37,10 @@ final class FullSizePreviewController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        // Above the bubble, which is at .popUpMenu, so it is never occluded by it.
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
+        // Stay immediately above the compatibility bubble, which uses screen-saver
+        // level to cover the Dock's own title tooltip.
+        panel.level = NSWindow.Level(
+            rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) + 1)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.animationBehavior = .none
         // Purely informational: it must never intercept the pointer that summoned it.

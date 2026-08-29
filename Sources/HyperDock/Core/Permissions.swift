@@ -13,7 +13,7 @@ final class Permissions {
     static let accessibilityDidChange = Notification.Name(
         "HyperDock.Permissions.accessibilityDidChange")
 
-    /// Required to enumerate Dock tiles and to raise, close or move windows.
+    /// Required to enumerate Dock tiles and to raise or close windows.
     private(set) var hasAccessibility = false
 
     /// Required for window thumbnails, and also for window *titles* — on modern macOS
