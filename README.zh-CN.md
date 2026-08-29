@@ -12,7 +12,7 @@
 
 | | |
 |---|---|
-| **版本** | 0.2 |
+| **版本** | 0.5 |
 | **平台** | macOS 26.0+，Apple Silicon（`arm64`） |
 | **Bundle ID** | `com.hyperdock.HyperDock` |
 | **界面语言** | 英语、简体中文 |
@@ -37,17 +37,13 @@ Liquid Glass 主题直接使用系统玻璃渲染，透明度和对比度会跟�
 
 ## 原版 HyperDock 素材
 
-公开仓库不会再分发原应用中受版权保护的图片。用户可从自己合法取得的 HyperDock
-副本中提取关闭按钮图片，并放入：
+仓库在 `Sources/HyperDock/Resources/OriginalHyperDock/` 中收录了从 HyperDock 1.8
+提取的素材。四种传统外观目前会使用原版关闭按钮；Liquid Glass 在运行时完全由代码
+和系统 API 绘制，不使用这些旧图片。
 
-```
-Sources/HyperDock/Resources/OriginalHyperDock/Helper/
-```
-
-构建时会使用 `closebox.png`、`closebox@2x.png`、`closebox_white.png`、
-`closebox_white@2x.png`、`closebox_white_pressed.png` 和
-`closebox_white_pressed@2x.png`。该目录已被 git 忽略；素材不存在时会自动使用
-SF Symbols 原生绘制版本，项目仍可正常构建和运行。
+原版素材版权 © 2018 Christian Baumgart，保留所有权利，**不属于**本项目 MIT 许可的
+范围。详见[素材与来源说明](ORIGINAL_HYPERDOCK_NOTICE.md)以及素材目录内的版权文件。
+若移除旧关闭按钮文件，项目仍会使用 SF Symbols 备用样式并可正常构建。
 
 ## 系统要求与权限
 
@@ -58,6 +54,13 @@ SF Symbols 原生绘制版本，项目仍可正常构建和运行。
 - **屏幕录制**：可选，用于缩略图和窗口标题
 
 ## 构建与安装
+
+0.5 下载版 DMG 已进行本地签名，但尚未经过 Apple 公证。如果 Gatekeeper 阻止打开，
+请右键点击并选择“打开”，或者清除下载文件的隔离标记：
+
+```bash
+xattr -d com.apple.quarantine ~/Downloads/HyperDock.dmg
+```
 
 ```bash
 # 建议仅执行一次：创建稳定的本地签名，使重建后无需反复授权
@@ -91,7 +94,7 @@ Sources/HyperDock/
 └── Windows/      # 窗口发现与数据模型
 ```
 
-Xcode 工程由 `project.yml` 生成；生成文件、构建产物和本地原版素材均不会提交。
+Xcode 工程由 `project.yml` 生成；生成文件、构建产物和原始偏好设置面板研究副本不会提交。
 
 ## 许可证
 

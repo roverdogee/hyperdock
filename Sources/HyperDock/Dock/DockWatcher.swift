@@ -22,6 +22,7 @@ final class DockWatcher: BubbleKeyboardHandling {
     private var dismissalTask: Task<Void, Never>?
     private var thumbnailTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var newWindowTask: Task<Void, Never>?
     /// Invalidates thumbnail callbacks and other work belonging to an older bubble.
     private var bubbleGeneration: UInt = 0
 
@@ -53,6 +54,9 @@ final class DockWatcher: BubbleKeyboardHandling {
 
     /// Closes a bubble the pointer has silently left. See `startPresenceWatchdog`.
     private var presenceTask: Task<Void, Never>?
+    /// Internal activation used to make Command-N reliable must not be mistaken for the
+    /// user leaving the preview. Scoped around that operation and its focus restoration.
+    private var isPerformingBackgroundNewWindow = false
 
     /// Where the pointer was on the previous event, for hover-intent.
     private var previousPointer: CGPoint?
@@ -117,7 +121,10 @@ final class DockWatcher: BubbleKeyboardHandling {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.closeBubble() }
+            Task { @MainActor in
+                guard self?.isPerformingBackgroundNewWindow != true else { return }
+                self?.closeBubble()
+            }
         }
         observers.insert(activationObserver, center: workspaceCenter)
 
@@ -391,11 +398,28 @@ final class DockWatcher: BubbleKeyboardHandling {
             onSelect: { [weak self] window in self?.select(window) },
             onClose: { [weak self] window in self?.close(window) },
             onNewWindow: { [weak self, application] in
-                ApplicationActions.newWindow(for: application)
-                self?.closeBubble()
+                guard let self, self.newWindowTask == nil else { return }
+                self.newWindowTask = Task { [weak self] in
+                    guard let self else { return }
+                    self.isPerformingBackgroundNewWindow = true
+                    defer {
+                        self.isPerformingBackgroundNewWindow = false
+                        self.newWindowTask = nil
+                    }
+                    let created = await ApplicationActions.newWindow(for: application)
+                    guard created else { return }
+                    // Give the application a moment to publish the new AX/CG window,
+                    // then update the still-open preview around the same Dock icon.
+                    try? await Task.sleep(for: .milliseconds(80))
+                    guard !Task.isCancelled else { return }
+                    await self.reloadActiveBubble()
+                }
             }
         )
 
+        // Resolve Command-N while the user is viewing the bubble rather than after the
+        // first click. AXCore serialises this with its other accessibility work.
+        Task { await AXCore.shared.prepareNewWindowMenuItem(pid: application.processIdentifier) }
         startThumbnailCapture(for: windows)
         startPeriodicRefresh(for: windows)
         startPresenceWatchdog()

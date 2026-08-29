@@ -88,8 +88,9 @@ struct ModifierCombo: OptionSet, Sendable, Codable, Hashable {
 
 /// Every user-facing setting, persisted to `UserDefaults`.
 ///
-/// Defaults match HyperDock's own shipping values so the app feels identical on first
-/// launch rather than requiring a setup pass.
+/// Defaults capture the maintainer's tested 0.5 configuration: a compact Liquid Glass
+/// preview with restrained animation and low-frequency live refresh. Existing users keep
+/// their persisted choices; these values apply to fresh installs and Reset to Defaults.
 @MainActor
 @Observable
 final class Preferences {
@@ -168,7 +169,7 @@ final class Preferences {
     }
 
     var includePalettes: Bool {
-        get { observed { bool("includePalettes", default: false) } }
+        get { observed { bool("includePalettes", default: true) } }
         set { write(newValue, "includePalettes") }
     }
 
@@ -186,13 +187,13 @@ final class Preferences {
     }
 
     var currentSpaceWindowsFirst: Bool {
-        get { observed { bool("currentSpaceWindowsFirst", default: false) } }
+        get { observed { bool("currentSpaceWindowsFirst", default: true) } }
         set { write(newValue, "currentSpaceWindowsFirst") }
     }
 
     /// Enlarges the hovered thumbnail into a full-size preview after a delay.
     var showFullSizePreviewOnHover: Bool {
-        get { observed { bool("showFullSizePreviewOnHover", default: true) } }
+        get { observed { bool("showFullSizePreviewOnHover", default: false) } }
         set { write(newValue, "showFullSizePreviewOnHover") }
     }
 
@@ -234,7 +235,7 @@ final class Preferences {
                 switch store.string(forKey: "theme") {
                 case "light": return .vibrantLight
                 case "dark": return .vibrantDark
-                default: return enumValue("theme", default: .automatic)
+                default: return enumValue("theme", default: .liquidGlass)
                 }
             }
         }
@@ -251,9 +252,9 @@ final class Preferences {
         set { write(newValue, "showCloseButton") }
     }
 
-    /// HyperDock 1.8 waited half a second before revealing a preview's close box.
+    /// A short delay prevents accidental closure without making the control feel late.
     var closeButtonDelay: Int {
-        get { observed { int("closeButtonDelay", default: 500) } }
+        get { observed { int("closeButtonDelay", default: 100) } }
         set { write(newValue, "closeButtonDelay") }
     }
 
@@ -270,9 +271,7 @@ final class Preferences {
 
     /// Relative bubble scale, 0…1, mapped to a thumbnail width range.
     var bubbleSize: Double {
-        // 0.473 maps to an effective 206 pt screenshot: HyperDock 1.8's 220 pt
-        // shipping setting after its internal 14 pt horizontal inset.
-        get { observed { double("bubbleSize", default: 0.4732) } }
+        get { observed { double("bubbleSize", default: 0.182) } }
         set { write(newValue, "bubbleSize") }
     }
 
@@ -282,7 +281,7 @@ final class Preferences {
     }
 
     var popupAnimation: PopupAnimation {
-        get { observed { enumValue("popupAnimation", default: .snapIn) } }
+        get { observed { enumValue("popupAnimation", default: .fade) } }
         set { write(newValue.rawValue, "popupAnimation") }
     }
 
@@ -323,17 +322,17 @@ final class Preferences {
     }
 
     var thumbnailQuality: ThumbnailQuality {
-        get { observed { enumValue("thumbnailQuality", default: .high) } }
+        get { observed { enumValue("thumbnailQuality", default: .medium) } }
         set { write(newValue.rawValue, "thumbnailQuality") }
     }
 
     var refreshThumbnailsEnabled: Bool {
-        get { observed { bool("refreshThumbnailsEnabled", default: false) } }
+        get { observed { bool("refreshThumbnailsEnabled", default: true) } }
         set { write(newValue, "refreshThumbnailsEnabled") }
     }
 
     var refreshThumbnailsInterval: Double {
-        get { observed { double("refreshThumbnailsInterval", default: 1) } }
+        get { observed { double("refreshThumbnailsInterval", default: 5) } }
         set { write(newValue, "refreshThumbnailsInterval") }
     }
 
@@ -370,7 +369,7 @@ final class Preferences {
     /// The menu-bar icon is otherwise the only route in, and it can be hidden. `⌘,` does
     /// not help: it only reaches an application that is frontmost, which an agent never is.
     var settingsHotKeyEnabled: Bool {
-        get { observed { bool("settingsHotKeyEnabled", default: true) } }
+        get { observed { bool("settingsHotKeyEnabled", default: false) } }
         set { write(newValue, "settingsHotKeyEnabled") }
     }
 

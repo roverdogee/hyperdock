@@ -23,8 +23,8 @@ settings:
     # touched off-main must be marked `nonisolated` (SE-0449). See docs/PLAN.md 3.9.
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_STRICT_CONCURRENCY: complete
-    MARKETING_VERSION: "0.2"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.5"
+    CURRENT_PROJECT_VERSION: "5"
     # Signing is done by scripts/build.sh after the build, not here: it picks the local
     # certificate from scripts/setup-signing.sh when present so TCC grants survive a
     # rebuild, and falls back to ad-hoc. Never import an identity interactively —

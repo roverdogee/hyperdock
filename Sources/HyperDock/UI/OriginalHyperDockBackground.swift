@@ -20,9 +20,10 @@ struct OriginalHyperDockBackground: View {
         BubbleShape(
             pointerPosition: pointerPosition,
             edge: edge,
-            cornerRadius: 9,
+            cornerRadius: preferences.theme == .liquidGlass ? 18 : 9,
             pointerWidth: Design.pointerWidth,
             pointerLength: Design.pointerLength,
+            smoothPointer: preferences.theme == .liquidGlass,
             showsPointer: showsPointer
         )
     }
@@ -35,15 +36,12 @@ struct OriginalHyperDockBackground: View {
     @ViewBuilder
     var body: some View {
         if preferences.theme == .liquidGlass {
-            // The system renderer owns translucency, contrast and refraction. In
-            // particular, this follows the Liquid Glass choice in System Settings →
-            // Appearance live; baking an opacity into a regular material would not.
+            // Let the clear system material draw both the backdrop and its refractive
+            // rim. An extra fill made the result darker, while a manual stroke covered
+            // the very edge highlights that distinguish glass from a translucent plate.
             liquidShape
                 .fill(.clear)
-                .glassEffect(.regular.interactive(), in: liquidShape)
-                .overlay {
-                    liquidShape.stroke(borderColor, lineWidth: 0.75)
-                }
+                .glassEffect(.clear.interactive(), in: liquidShape)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         } else {

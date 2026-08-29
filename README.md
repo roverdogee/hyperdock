@@ -12,7 +12,7 @@ original HyperDock source code. See [Original HyperDock notice](ORIGINAL_HYPERDO
 
 | | |
 |---|---|
-| **Version** | 0.2 |
+| **Version** | 0.5 |
 | **Platform** | macOS 26.0+, Apple Silicon (`arm64`) |
 | **Bundle ID** | `com.hyperdock.HyperDock` |
 | **Languages** | English, Simplified Chinese |
@@ -38,18 +38,16 @@ in-app opacity value.
 
 ## Original HyperDock assets
 
-The public repository does not redistribute copyrighted artwork from the original app.
-When original close-button images from a user's lawfully obtained HyperDock copy are
-placed under:
+The repository includes artwork extracted from HyperDock 1.8 under
+`Sources/HyperDock/Resources/OriginalHyperDock/`. The four legacy appearance themes
+currently use the original close-button images; Liquid Glass is entirely code-native and
+does not use any of these images at runtime.
 
-```
-Sources/HyperDock/Resources/OriginalHyperDock/Helper/
-```
-
-the build uses `closebox.png`, `closebox@2x.png`, `closebox_white.png`,
-`closebox_white@2x.png`, `closebox_white_pressed.png`, and
-`closebox_white_pressed@2x.png`. The directory is gitignored. Without those files, the
-app uses a native SF Symbols fallback and remains fully buildable.
+The original artwork remains copyright © 2018 Christian Baumgart, all rights reserved,
+and is **not** covered by this project's MIT License. See the
+[asset and provenance notice](ORIGINAL_HYPERDOCK_NOTICE.md) and the copyright file stored
+with the assets. A native SF Symbols fallback keeps the project buildable if the old
+close-button files are removed.
 
 ## Requirements and permissions
 
@@ -60,6 +58,13 @@ app uses a native SF Symbols fallback and remains fully buildable.
 - **Screen Recording**: optional, for thumbnails and window titles
 
 ## Build and install
+
+The downloadable 0.5 DMG is locally signed but not Apple-notarized. If Gatekeeper blocks
+the downloaded image, right-click it and choose **Open**, or clear its quarantine flag:
+
+```bash
+xattr -d com.apple.quarantine ~/Downloads/HyperDock.dmg
+```
 
 ```bash
 # Recommended once: creates a stable local identity so TCC permissions survive rebuilds
@@ -95,7 +100,7 @@ Sources/HyperDock/
 ```
 
 The Xcode project is generated from `project.yml`; generated projects, build products,
-and local original assets are intentionally ignored.
+and the original preference-pane research copy are intentionally ignored.
 
 ## License
 

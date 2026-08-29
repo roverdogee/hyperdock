@@ -1,0 +1,15 @@
+Original HyperDock artwork
+==========================
+
+The image and icon files in this directory were extracted from HyperDock 1.8.
+
+Original HyperDock copyright © 2018 Christian Baumgart. All rights reserved.
+
+These files are original HyperDock assets and are not covered by this repository's MIT
+License. The MIT License applies only to the independently written implementation and
+other original work in this repository. No ownership of, endorsement by, or affiliation
+with the original author is claimed.
+
+The assets are included for preservation and compatibility with the legacy HyperDock
+appearance themes. Do not assume this repository grants permission to reuse or
+redistribute them independently of any rights granted by their copyright owner.

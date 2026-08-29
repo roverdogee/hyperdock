@@ -22,6 +22,9 @@ nonisolated struct BubbleShape: InsettableShape, Sendable {
     var cornerRadius: CGFloat = 12
     var pointerWidth: CGFloat = 22
     var pointerLength: CGFloat = 10
+    /// Liquid Glass looks more natural when the pointer flows out of the body instead
+    /// of ending in the original theme's sharp triangular shoulders.
+    var smoothPointer: Bool = false
     var insetAmount: CGFloat = 0
     /// Lets the pointer animate along the edge when the user slides to a neighbouring
     /// icon instead of the whole bubble jumping.
@@ -67,22 +70,61 @@ nonisolated struct BubbleShape: InsettableShape, Sendable {
         case .bottom:
             let x = min(max(pointerPosition, body.minX + inset), body.maxX - inset)
             path.move(to: CGPoint(x: x - half, y: body.maxY))
-            path.addLine(to: CGPoint(x: x, y: body.maxY + pointerLength))
-            path.addLine(to: CGPoint(x: x + half, y: body.maxY))
+            if smoothPointer {
+                path.addCurve(
+                    to: CGPoint(x: x, y: body.maxY + pointerLength),
+                    control1: CGPoint(x: x - half * 0.45, y: body.maxY),
+                    control2: CGPoint(x: x - 3, y: body.maxY + pointerLength - 1.5)
+                )
+                path.addCurve(
+                    to: CGPoint(x: x + half, y: body.maxY),
+                    control1: CGPoint(x: x + 3, y: body.maxY + pointerLength - 1.5),
+                    control2: CGPoint(x: x + half * 0.45, y: body.maxY)
+                )
+            } else {
+                path.addLine(to: CGPoint(x: x, y: body.maxY + pointerLength))
+                path.addLine(to: CGPoint(x: x + half, y: body.maxY))
+            }
             path.closeSubpath()
 
         case .left:
             let y = min(max(pointerPosition, body.minY + inset), body.maxY - inset)
             path.move(to: CGPoint(x: body.minX, y: y - half))
-            path.addLine(to: CGPoint(x: body.minX - pointerLength, y: y))
-            path.addLine(to: CGPoint(x: body.minX, y: y + half))
+            if smoothPointer {
+                path.addCurve(
+                    to: CGPoint(x: body.minX - pointerLength, y: y),
+                    control1: CGPoint(x: body.minX, y: y - half * 0.45),
+                    control2: CGPoint(x: body.minX - pointerLength + 1.5, y: y - 3)
+                )
+                path.addCurve(
+                    to: CGPoint(x: body.minX, y: y + half),
+                    control1: CGPoint(x: body.minX - pointerLength + 1.5, y: y + 3),
+                    control2: CGPoint(x: body.minX, y: y + half * 0.45)
+                )
+            } else {
+                path.addLine(to: CGPoint(x: body.minX - pointerLength, y: y))
+                path.addLine(to: CGPoint(x: body.minX, y: y + half))
+            }
             path.closeSubpath()
 
         case .right:
             let y = min(max(pointerPosition, body.minY + inset), body.maxY - inset)
             path.move(to: CGPoint(x: body.maxX, y: y - half))
-            path.addLine(to: CGPoint(x: body.maxX + pointerLength, y: y))
-            path.addLine(to: CGPoint(x: body.maxX, y: y + half))
+            if smoothPointer {
+                path.addCurve(
+                    to: CGPoint(x: body.maxX + pointerLength, y: y),
+                    control1: CGPoint(x: body.maxX, y: y - half * 0.45),
+                    control2: CGPoint(x: body.maxX + pointerLength - 1.5, y: y - 3)
+                )
+                path.addCurve(
+                    to: CGPoint(x: body.maxX, y: y + half),
+                    control1: CGPoint(x: body.maxX + pointerLength - 1.5, y: y + 3),
+                    control2: CGPoint(x: body.maxX, y: y + half * 0.45)
+                )
+            } else {
+                path.addLine(to: CGPoint(x: body.maxX + pointerLength, y: y))
+                path.addLine(to: CGPoint(x: body.maxX, y: y + half))
+            }
             path.closeSubpath()
         }
 

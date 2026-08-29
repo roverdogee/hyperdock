@@ -23,6 +23,7 @@ struct WindowTile: View {
 
     @State private var preferences = Preferences.shared
     @State private var closeButtonIsVisible = false
+    @State private var closeButtonIsHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
@@ -54,6 +55,7 @@ struct WindowTile: View {
         .accessibilityAction(named: Text("Close window")) { onClose() }
         .task(id: isFocused) {
             closeButtonIsVisible = false
+            closeButtonIsHovered = false
             guard isFocused else { return }
             try? await Task.sleep(for: .milliseconds(max(0, preferences.closeButtonDelay)))
             guard !Task.isCancelled else { return }
@@ -87,11 +89,11 @@ struct WindowTile: View {
             // glass. Drawing it inside the clipped card avoids the rectangular corner
             // shadows produced by an outer layer or a view-level shadow.
             RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
-                .strokeBorder(cardBorderColor, lineWidth: 1)
+                .strokeBorder(cardBorderColor, lineWidth: 0.75)
                 .allowsHitTesting(false)
             if isFrontWindow {
                 RoundedRectangle(cornerRadius: Design.cardRadius, style: .continuous)
-                    .strokeBorder(frontWindowBorderColor, lineWidth: 1)
+                    .strokeBorder(frontWindowBorderColor, lineWidth: 0.75)
                     .allowsHitTesting(false)
             }
             if highlighted {
@@ -202,13 +204,35 @@ struct WindowTile: View {
     private var closeButton: some View {
         VStack {
             HStack {
-                Button(action: onClose) { Color.clear }
-                    .buttonStyle(OriginalCloseButtonStyle(
-                        normalAsset: closeButtonAsset,
-                        pressedAsset: closeButtonPressedAsset,
-                        size: usesLightBubble ? 30 : 28
-                    ))
-                .accessibilityLabel(Text("Close window"))
+                if preferences.theme == .liquidGlass {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(
+                                closeButtonIsHovered
+                                    ? Color.red
+                                    : liquidCloseButtonColor.opacity(0.88)
+                            )
+                            .frame(width: 26, height: 26)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(
+                        AnimatedCloseButtonStyle(
+                            isHovered: closeButtonIsHovered,
+                            reduceMotion: reduceMotion
+                        )
+                    )
+                    .onHover(perform: updateCloseButtonHover)
+                    .accessibilityLabel(Text("Close window"))
+                } else {
+                    Button(action: onClose) { Color.clear }
+                        .buttonStyle(OriginalCloseButtonStyle(
+                            normalAsset: closeButtonAsset,
+                            pressedAsset: closeButtonPressedAsset,
+                            size: usesLightBubble ? 30 : 28
+                        ))
+                        .accessibilityLabel(Text("Close window"))
+                }
                 Spacer()
             }
             Spacer()
@@ -216,6 +240,16 @@ struct WindowTile: View {
         // The archived artwork already contains a one-point transparent margin. Adding
         // layout padding on top of it made the visible circle float too far inward.
         // Align its canvas directly with the screenshot's top-leading corner instead.
+    }
+
+    private func updateCloseButtonHover(_ isHovered: Bool) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+            closeButtonIsHovered = isHovered
+        }
+    }
+
+    private var liquidCloseButtonColor: Color {
+        usesLightBubble ? .black : .white
     }
 
     private var usesLightBubble: Bool {
@@ -267,11 +301,11 @@ struct WindowTile: View {
     }
 
     private var cardBorderColor: Color {
-        usesLightBubble ? .black.opacity(0.28) : .white.opacity(0.30)
+        usesLightBubble ? .black.opacity(0.13) : .white.opacity(0.20)
     }
 
     private var frontWindowBorderColor: Color {
-        usesLightBubble ? .black.opacity(0.46) : .white.opacity(0.52)
+        usesLightBubble ? .black.opacity(0.19) : .white.opacity(0.30)
     }
 
     /// Falls back to the application name so a window with no title is still identifiable
@@ -316,5 +350,28 @@ private struct OriginalCloseButtonStyle: ButtonStyle {
         .opacity(configuration.isPressed ? 0.82 : 1)
         .shadow(color: .black.opacity(0.45), radius: 1.5, y: 1)
         .contentShape(Rectangle().inset(by: -4))
+    }
+}
+
+private struct AnimatedCloseButtonStyle: ButtonStyle {
+    let isHovered: Bool
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.82 : (isHovered ? 1.12 : 1))
+            .opacity(configuration.isPressed ? 0.58 : 1)
+            // A small shadow keeps the borderless glyph visible over arbitrary window
+            // contents without bringing back the old circular plate.
+            .shadow(color: .black.opacity(isHovered ? 0.28 : 0.18), radius: 1, y: 0.5)
+            .contentShape(Rectangle().inset(by: -4))
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.16, dampingFraction: 0.66),
+                value: configuration.isPressed
+            )
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: isHovered
+            )
     }
 }

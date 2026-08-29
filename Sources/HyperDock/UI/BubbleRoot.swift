@@ -5,6 +5,7 @@ import SwiftUI
 struct BubbleRoot: View {
     @Bindable var model: BubbleModel
     @State private var preferences = Preferences.shared
+    @State private var isNewWindowButtonHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
@@ -63,7 +64,7 @@ struct BubbleRoot: View {
     /// HyperDock presents the application name as the centred heading.
     private var header: some View {
         HStack(spacing: 8) {
-            Color.clear.frame(width: 18, height: 18)
+            Color.clear.frame(width: headerActionSize, height: headerActionSize)
 
             Spacer(minLength: 0)
 
@@ -74,20 +75,70 @@ struct BubbleRoot: View {
 
             Spacer(minLength: 0)
 
-            Button(action: model.onNewWindow) {
-                // The original bundle only contains a 16×16 1× bitmap. Reconstruct the
-                // same glyph as a vector so it remains crisp on Retina displays.
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(primaryTextColor)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(Text("New Window (⌘N)"))
-            .accessibilityLabel(Text("New Window (⌘N)"))
+            newWindowButton
         }
         .frame(height: Design.headerHeight)
+    }
+
+    private var headerActionSize: CGFloat {
+        // Keep the glyph small, but give it the same forgiving target as the close
+        // button. A 20-point target was easy to leave between mouse-down and mouse-up.
+        preferences.theme == .liquidGlass ? 26 : 22
+    }
+
+    @ViewBuilder
+    private var newWindowButton: some View {
+        if preferences.theme == .liquidGlass {
+            Button(action: model.onNewWindow) { liquidPlusLabel }
+                .buttonStyle(
+                    AnimatedPlusButtonStyle(
+                        isHovered: isNewWindowButtonHovered,
+                        restingOpacity: 0.88,
+                        reduceMotion: reduceMotion
+                    )
+                )
+                .frame(width: headerActionSize, height: headerActionSize)
+                .onHover(perform: updateNewWindowButtonHover)
+                .help(Text("New Window (⌘N)"))
+                .accessibilityLabel(Text("New Window (⌘N)"))
+        } else {
+            Button(action: model.onNewWindow) { plusLabel }
+                .buttonStyle(
+                    AnimatedPlusButtonStyle(
+                        isHovered: isNewWindowButtonHovered,
+                        restingOpacity: 1,
+                        reduceMotion: reduceMotion
+                    )
+                )
+                .frame(width: headerActionSize, height: headerActionSize)
+                .onHover(perform: updateNewWindowButtonHover)
+                .help(Text("New Window (⌘N)"))
+                .accessibilityLabel(Text("New Window (⌘N)"))
+        }
+    }
+
+    private func updateNewWindowButtonHover(_ isHovered: Bool) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+            isNewWindowButtonHovered = isHovered
+        }
+    }
+
+    private var liquidPlusLabel: some View {
+        Image(systemName: "plus")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(primaryTextColor)
+            .frame(width: 26, height: 26)
+            .contentShape(Rectangle())
+    }
+
+    private var plusLabel: some View {
+        // The original bundle only contains a 16×16 1× bitmap. Reconstruct the same
+        // glyph as a vector so it remains crisp on Retina displays.
+        Image(systemName: "plus")
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(primaryTextColor)
+            .frame(width: 22, height: 22)
+            .contentShape(Rectangle())
     }
 
     private var primaryTextColor: Color {
@@ -129,5 +180,26 @@ struct BubbleRoot: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+private struct AnimatedPlusButtonStyle: ButtonStyle {
+    let isHovered: Bool
+    let restingOpacity: Double
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.82 : (isHovered ? 1.10 : 1))
+            .opacity(configuration.isPressed ? 0.58 : (isHovered ? 1 : restingOpacity))
+            .contentShape(Rectangle().inset(by: -4))
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.16, dampingFraction: 0.66),
+                value: configuration.isPressed
+            )
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: isHovered
+            )
     }
 }

@@ -52,6 +52,9 @@ nonisolated final class AXCore: @unchecked Sendable {
     /// Application elements are expensive to recreate and safe to keep. Touched only
     /// on `queue`.
     private var applicationCache: [pid_t: AXUIElement] = [:]
+    /// Command-N menu items resolved while a preview is opening. Kept on the AX queue;
+    /// caching turns a one-second first traversal into a single action call on click.
+    private var newWindowMenuItems: [pid_t: AXUIElement] = [:]
     /// A termination notification normally removes entries; this hard bound also covers
     /// missed notifications and PID churn during sleep/session transitions.
     private let applicationCacheLimit = 128
@@ -146,6 +149,7 @@ nonisolated final class AXCore: @unchecked Sendable {
     nonisolated func forget(pid: pid_t) {
         queue.async {
             self.applicationCache.removeValue(forKey: pid)
+            self.newWindowMenuItems.removeValue(forKey: pid)
             self.windowElements = self.windowElements.filter { $0.value.pid != pid }
         }
     }
@@ -228,6 +232,100 @@ nonisolated final class AXCore: @unchecked Sendable {
                 return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
             }
             return false
+        }
+    }
+
+    /// Invokes the target application's Command-N menu item without activating it.
+    ///
+    /// Posting Command-N after `NSRunningApplication.activate()` made the new window
+    /// reliable, but it also stole focus and caused the preview to disappear. Accessibility
+    /// can invoke the menu item's action directly while its application stays in the
+    /// background. Matching the shortcut metadata instead of the title keeps this working
+    /// in every application language.
+    func pressNewWindowMenuItem(pid: pid_t) async -> Bool {
+        await perform {
+            if let cached = self.newWindowMenuItems[pid] {
+                let result = AXUIElementPerformAction(cached, kAXPressAction as CFString)
+                if result == .success { return true }
+                self.newWindowMenuItems.removeValue(forKey: pid)
+            }
+            guard let element = self.resolveNewWindowMenuItem(pid: pid) else { return false }
+            return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+        }
+    }
+
+    /// Starts the expensive menu traversal while the pointer is still looking at the
+    /// preview, before it can click the plus button.
+    func prepareNewWindowMenuItem(pid: pid_t) async {
+        await perform {
+            guard self.newWindowMenuItems[pid] == nil else { return }
+            _ = self.resolveNewWindowMenuItem(pid: pid)
+        }
+    }
+
+    /// Must run on `queue`; the returned element never crosses that queue boundary.
+    private func resolveNewWindowMenuItem(pid: pid_t) -> AXUIElement? {
+        dispatchPrecondition(condition: .onQueue(queue))
+        let app = cachedApplication(pid)
+        guard let rawMenuBar = Self.value(app, kAXMenuBarAttribute),
+              let menuBar = Self.checkedElement(rawMenuBar)
+        else { return nil }
+
+        var stack: [(AXUIElement, Int)] = [(menuBar, 0)]
+        var visited = 0
+        while let (element, depth) = stack.popLast(), visited < 400 {
+            visited += 1
+            if depth <= 6,
+               let children = Self.value(element, kAXChildrenAttribute) as? [AXUIElement] {
+                for child in children { stack.append((child, depth + 1)) }
+            }
+
+            let virtualKey = (Self.value(element, kAXMenuItemCmdVirtualKeyAttribute)
+                as? NSNumber)?.intValue
+            let commandCharacter = (Self.value(element, kAXMenuItemCmdCharAttribute)
+                as? String)?.lowercased()
+            let modifiers = (Self.value(element, kAXMenuItemCmdModifiersAttribute)
+                as? NSNumber)?.uint32Value ?? 0
+            guard (virtualKey == 45 || commandCharacter == "n"), modifiers == 0
+            else { continue }
+
+            if let enabled = Self.value(element, kAXEnabledAttribute) as? Bool, !enabled {
+                continue
+            }
+            if newWindowMenuItems.count >= applicationCacheLimit {
+                newWindowMenuItems.removeAll(keepingCapacity: true)
+            }
+            newWindowMenuItems[pid] = element
+            return element
+        }
+        return nil
+    }
+
+    /// Changes the frontmost application through Accessibility. This is synchronous at
+    /// the window server, unlike `NSRunningApplication.activate()`, whose request may be
+    /// ignored or arrive after a later focus restoration.
+    func setFrontmost(pid: pid_t) async -> Bool {
+        await perform {
+            AXUIElementSetAttributeValue(
+                self.cachedApplication(pid),
+                kAXFrontmostAttribute as CFString,
+                kCFBooleanTrue
+            ) == .success
+        }
+    }
+
+    /// Captures the target application's currently focused window as a stable CG id so
+    /// it can be restored after a temporarily frontmost background action.
+    func focusedWindowID(pid: pid_t) async -> CGWindowID? {
+        await perform {
+            let app = self.cachedApplication(pid)
+            guard let raw = Self.value(app, kAXFocusedWindowAttribute),
+                  let element = Self.checkedElement(raw)
+            else { return nil }
+            var id: CGWindowID = 0
+            guard _AXUIElementGetWindow(element, &id) == .success, id != 0 else { return nil }
+            self.remember(element, id: id, pid: pid)
+            return id
         }
     }
 
